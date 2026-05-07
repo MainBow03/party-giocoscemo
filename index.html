@@ -122,14 +122,17 @@
       { id: 'phione', name: 'Phione', url: 'https://i.pinimg.com/736x/c4/a6/e4/c4a6e40125317ccb99fada99bec42061.jpg' },
       { id: 'sewaddle', name: 'Sewaddle', url: 'https://i.pinimg.com/736x/d8/4e/c5/d84ec53d9d73d938cff545aee068e35f.jpg' },
       { id: 'sandile', name: 'Sandile', url: 'https://i.pinimg.com/736x/ff/e9/74/ffe974752c8a0a91cc2c64a214a3e8bf.jpg' },
-      { id: 'flabebe', name: 'Flabébé', url: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/669.png' }
+      { id: 'flabebe', name: 'Flabébé', url: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/669.png' },
+      { id: 'bidoof', name: 'Bidoof', url: 'https://i.pinimg.com/736x/80/ba/75/80ba75f1a230ef19475de19f9b3bd513.jpg' },
+      { id: 'emolga', name: 'Emolga', url: 'https://i.pinimg.com/736x/86/9b/fd/869bfd1473248fc6f550ead2e52d0a13.jpg' },
+      { id: 'amaura', name: 'Amaura', url: 'https://i.pinimg.com/1200x/fa/01/05/fa0105fd4b47bf636d6f0623aceaa1b7.jpg' }
     ];
 
     const MINIGAMES = [
-      { id: 'fabbrica_dadi', name: 'La Fabbrica dei Dadi', icon: 'fa-solid fa-cubes', description: 'Tutti giocano contemporaneamente! Fase 1: Lancia il tuo dado (cooldown 3s). Clicca sulla colonna del numero uscito per riempirla. Completa 4 colonne per sbloccare i tuoi dadi personalizzati! Fase 2: Corsa finale! Il tuo dado avrà solo i 4 numeri sbloccati. Arriva alla casella 45 per vincere!' },
+      { id: 'fabbrica_dadi', name: 'La Fabbrica dei Dadi', icon: 'fa-solid fa-cubes', description: 'Tutti giocano contemporaneamente! Fase 1: Lancia il tuo dado (cooldown 3s). Clicca sulla colonna del numero uscito per riempirla. Completa 4 colonne per sbloccare i tuoi dadi personalizzati! Fase 2: Corsa finale! Il tuo dado avrà solo i 4 numeri sbloccati. Arriva alla casella 65 per vincere!' },
       { id: 'cassafortiere', name: 'Il Cassafortiere', icon: 'fa-solid fa-vault', description: 'Tutti in contemporanea! Ognuno deve aprire 3 casseforti segrete in sequenza (da 3, 5 e 8 cifre). Inserisci un codice e ricevi gli indizi: Verde = Numero al posto giusto. Giallo = Numero presente ma nel posto sbagliato. Grigio = Assente. Chi apre la terza cassaforte per primo vince!' },
       { id: 'scaccia_numeri', name: 'Scaccia Numeri', icon: 'fa-solid fa-dice', description: 'Lancia i dadi e clicca sui numeri per eliminarli dal tuo tabellone. Puoi usare i dadi singolarmente o sommarli. Il primo che elimina tutti i numeri vince!' },
-      { id: 'palloncino', name: 'Il Palloncino', icon: 'fa-solid fa-burst', description: 'Gonfia il tuo palloncino cliccando, ma attento a non farlo scoppiare! Ognuno ha un limite segreto diverso in ogni round. Fermati prima che esploda! Si giocano 5 round: il palloncino intero più grande prende 5 punti, il secondo 4, ecc. Se scoppi, 0 punti!' },
+      { id: 'palloncino', name: 'Il Palloncino', icon: 'fa-solid fa-burst', description: 'Gonfia il tuo palloncino cliccando, ma attento a non farlo scoppiare! Hai 30 secondi. Il limite segreto di scoppio varia casualmente tra le 15 e le 35 gonfiate per ogni round e giocatore. Fermati prima che esploda! Si giocano 5 round: il palloncino intero più grande prende 5 punti, il secondo 4, ecc. Se scoppi, 0 punti!' },
       { id: 'sette_mezzo', name: 'Sette e Mezzo', icon: 'fa-solid fa-money-bill-wave', description: 'Azzardo puro! 10 turni per sfidare il Banco in contemporanea. Avvicinati al 7.5 senza sballare. +1.5 se batti il banco, +2 se fai 7.5, -0.5 se sballi. Chi farà più punti in 10 turni?' },
       { id: 'sentiero_invisibile', name: 'Il Sentiero Invisibile', icon: 'fa-solid fa-shoe-prints', description: 'Trova il percorso sicuro dal basso verso l\'alto! Clicca sulle caselle adiacenti per avanzare. Se sbagli, cadi e il turno passa: dovrai ricordare il percorso corretto al tuo prossimo turno!' },
       { id: 'snake_ladders', name: 'Scale e Serpenti', icon: 'fa-solid fa-staff-snake', description: 'Lancia due dadi per arrivare alla casella 100. Attento ai serpenti e ai bidoni, ma sfrutta le scale e le stelle per vincere!' },
@@ -200,6 +203,7 @@
             currentMinigameRound: 1,
             minigameScores: initialScores,
             currentPumps, status, secretLimits,
+            timerEnd: Date.now() + 30000,
             finishedPlayers: [], isGameOver: false
         };
       }
@@ -401,7 +405,7 @@
         const initialBoards = {};
         activeOrder.forEach(id => initialBoards[id] = 1);
 
-        const specialCells = new Set([5, 34, 20, 39, 56, 74, 11, 33, 71, 88, 24, 3, 49, 14, 97, 61, 91, 73, 51, 79, 59, 1, 100]); 
+        const specialCells = new Set([5, 34, 20, 39, 56, 74, 11, 33, 71, 88, 44, 64, 24, 3, 49, 14, 97, 61, 91, 73, 51, 79, 59, 67, 47, 1, 100]); 
         const stars = [];
         const bins = [];
         while(stars.length < 6) {
@@ -782,9 +786,11 @@
             <div className="flex flex-col gap-2">
               <div className="flex items-center gap-2">
                 <span className="text-slate-400">Round:</span>
-                {[1, 3, 5, 8, 10].map(n => (
-                   <button key={n} onClick={() => handleRoundsChange(n)} className={`px-3 py-1 rounded border ${rounds === n ? 'bg-amber-600 border-amber-400' : 'bg-slate-900 border-slate-600'}`}>{n}</button>
-                ))}
+                <select value={rounds} onChange={(e) => handleRoundsChange(Number(e.target.value))} className="bg-slate-900 border border-slate-600 rounded px-3 py-1 text-white font-bold cursor-pointer focus:outline-none focus:border-amber-400">
+                    {Array.from({length: 15}, (_, i) => i + 1).map(n => (
+                        <option key={n} value={n}>{n}</option>
+                    ))}
+                </select>
               </div>
             </div>
           </div>
@@ -869,11 +875,13 @@
           <h2 className="text-2xl font-bold mb-6 border-b border-slate-700 pb-4">Impostazioni Stanza Online</h2>
           <div className="space-y-6">
             <div>
-              <label className="block text-slate-400 mb-2">Numero di Round</label>
-              <div className="flex gap-2 mb-4">
-                {[1, 3, 5, 8, 10].map(n => (
-                  <button key={n} onClick={() => handleRoundsChange(n)} className={`flex-1 py-2 rounded-lg border ${rounds === n ? 'bg-indigo-600 border-indigo-400' : 'bg-slate-900 border-slate-600 hover:border-slate-400'}`}>{n}</button>
-                ))}
+              <label className="block text-slate-400 mb-2">Numero di Round (da 1 a 15)</label>
+              <div className="mb-4">
+                <select value={rounds} onChange={(e) => handleRoundsChange(Number(e.target.value))} className="w-full md:w-48 bg-slate-900 border border-slate-600 hover:border-slate-400 rounded-lg px-4 py-2 text-white font-bold cursor-pointer transition-colors outline-none focus:border-indigo-500">
+                    {Array.from({length: 15}, (_, i) => i + 1).map(n => (
+                        <option key={n} value={n}>{n} Round</option>
+                    ))}
+                </select>
               </div>
               
               <label className="block text-slate-400 mb-2">Seleziona i Minigiochi:</label>
@@ -1187,8 +1195,8 @@
                   [`gameState.cooldowns.${uid}`]: Date.now() + 3000
               };
 
-              if (newPos >= 45) {
-                  newPos = 45;
+              if (newPos >= 65) {
+                  newPos = 65;
                   playSound('unlock');
                   const newFinished = [...finishedPlayers, uid];
                   updates[`gameState.finishedPlayers`] = newFinished;
@@ -1237,15 +1245,15 @@
                  </div>
              </div>
              
-             {/* RACE TRACK 0-45 */}
+             {/* RACE TRACK 0-65 */}
              <div className="w-full bg-slate-900 rounded-lg p-2 border border-slate-600 relative h-16 flex items-center">
                  <div className="absolute left-0 right-0 h-2 bg-slate-700 rounded-full mx-4"></div>
                  <div className="absolute left-4 text-xs font-bold text-slate-500 top-1">VIA</div>
-                 <div className="absolute right-4 text-xs font-bold text-amber-500 top-1">45</div>
+                 <div className="absolute right-4 text-xs font-bold text-amber-500 top-1">65</div>
                  
                  {gameState.turnOrder.map(uid => {
                      const pos = gameState.positions[uid] || 0;
-                     const percentage = Math.min(100, (pos / 45) * 100);
+                     const percentage = Math.min(100, (pos / 65) * 100);
                      const p = players[uid];
                      return (
                          <div key={`track-${uid}`} className="absolute transition-all duration-300 ease-in-out z-10" style={{ left: `calc(${percentage}% - 12px)`, marginLeft: '16px', marginRight: '16px' }}>
@@ -1309,7 +1317,7 @@
                              ) : (
                                  <div className="flex flex-col items-center justify-center w-full h-full animate-[spinCard_0.5s_ease-out]">
                                      <i className="fa-solid fa-flag-checkered text-3xl text-emerald-500 mb-2"></i>
-                                     <div className="text-3xl font-black text-white mb-2">{gameState.positions[uid]} <span className="text-sm text-slate-400">/ 45</span></div>
+                                     <div className="text-3xl font-black text-white mb-2">{gameState.positions[uid]} <span className="text-sm text-slate-400">/ 65</span></div>
                                      <div className="flex gap-2">
                                          {gameState.unlockedNumbers[uid].map(num => (
                                              <div key={num} className="w-8 h-8 rounded bg-slate-700 border-2 border-slate-500 flex items-center justify-center font-bold text-white shadow-inner">{num}</div>
@@ -3226,12 +3234,54 @@
                       'gameState.currentPumps': newPumps,
                       'gameState.status': newStatus,
                       'gameState.secretLimits': newLimits,
-                      'gameState.phase': 'playing'
+                      'gameState.phase': 'playing',
+                      'gameState.timerEnd': Date.now() + 30000
                   });
               }
           }, 4500); // 4.5 secondi per vedere i risultati del round
           return () => clearTimeout(to);
       }, [isHost, phase, currentMinigameRound, turnOrder, minigameScores, gameState.isGameOver]);
+
+      // Timer UI (Locale)
+      const [timeLeft, setTimeLeft] = useState(30);
+      useEffect(() => {
+        if (phase !== 'playing' || !gameState.timerEnd) {
+          setTimeLeft(30);
+          return;
+        }
+        const updateTimer = () => {
+          const remain = Math.max(0, Math.ceil((gameState.timerEnd - Date.now()) / 1000));
+          setTimeLeft(remain);
+        };
+        updateTimer();
+        const int = setInterval(updateTimer, 200);
+        return () => clearInterval(int);
+      }, [phase, gameState.timerEnd]);
+
+      // Gestione Timeout (Host)
+      useEffect(() => {
+        if (!isHost || phase !== 'playing' || !gameState.timerEnd) return;
+        
+        const checkTimeout = () => {
+            if (Date.now() >= gameState.timerEnd) {
+                const updates = {};
+                let someoneStopped = false;
+                turnOrder.forEach(uid => {
+                    if (status[uid] === 'pumping') {
+                        updates[`gameState.status.${uid}`] = 'stood';
+                        someoneStopped = true;
+                    }
+                });
+                
+                if (someoneStopped) {
+                    playSound('stand');
+                    updateRoom(updates);
+                }
+            }
+        };
+        const int = setInterval(checkTimeout, 500);
+        return () => clearInterval(int);
+      }, [isHost, phase, gameState.timerEnd, status, turnOrder, updateRoom]);
 
 
       const handlePump = (uid) => {
@@ -3270,7 +3320,14 @@
                 <h2 className="text-xl font-bold text-rose-400"><i className="fa-solid fa-burst mr-2"></i>Il Palloncino</h2>
                 <p className="text-xs text-slate-400">Round {currentMinigameRound} di 5</p>
              </div>
-             <div className="flex gap-2 text-[10px] md:text-xs font-bold text-slate-400">
+             
+             {phase === 'playing' && (
+                 <div className={`px-3 py-1 rounded-full border ${timeLeft <= 5 ? 'border-red-500 text-red-500 animate-pulse bg-red-900/20' : 'border-amber-500/50 text-amber-400 bg-amber-900/20'} font-mono font-bold flex items-center gap-2`}>
+                     <i className="fa-solid fa-clock"></i> {timeLeft}s
+                 </div>
+             )}
+
+             <div className="hidden md:flex gap-2 text-[10px] md:text-xs font-bold text-slate-400">
                 <span className="bg-slate-900 px-2 py-1 rounded">1°: 5pt</span>
                 <span className="bg-slate-900 px-2 py-1 rounded">2°: 4pt</span>
                 <span className="bg-slate-900 px-2 py-1 rounded text-red-400">Scoppio: 0pt</span>
@@ -5234,41 +5291,64 @@
 
       const gameName = MINIGAMES.find(g => g.id === gameState.gameId)?.name || 'Minigioco';
 
+      // Ordina i giocatori per Punteggio Totale per mostrare la Classifica Generale
+      const sortedPlayers = Object.values(players).sort((a, b) => b.totalScore - a.totalScore);
+
       return (
-        <div className="max-w-2xl mx-auto mt-10 bg-slate-800 p-8 rounded-2xl border border-slate-700 shadow-2xl">
-          <h2 className="text-3xl font-bold mb-2 text-center text-emerald-400">Fine Round {currentRound}!</h2>
-          <p className="text-center text-slate-400 mb-8">Risultati "{gameName}"</p>
+        <div className="max-w-3xl mx-auto mt-10 bg-slate-800 p-6 md:p-8 rounded-2xl border border-slate-700 shadow-2xl">
+          <h2 className="text-3xl font-bold mb-2 text-center text-emerald-400">Classifica dopo il Round {currentRound}</h2>
+          <p className="text-center text-slate-400 mb-8">Risultati minigioco: <strong className="text-white uppercase tracking-wider">{gameName}</strong></p>
 
           <div className="space-y-4 mb-8">
-            {(gameState.results || []).map((res, index) => {
-              const p = players[res.id];
-              if (!p) return null; 
+            {sortedPlayers.map((p, index) => {
               const char = CHARACTERS.find(c => c.id === p.character);
-              const isWinner = index === 0;
+              
+              // Trova i dettagli del risultato del minigioco appena concluso per questo giocatore
+              const roundResult = (gameState.results || []).find(r => r.id === p.id);
+              const roundPos = roundResult ? roundResult.position : '-';
+              const roundPts = roundResult ? roundResult.pointsEarned : 0;
+              
+              const isFirstOverall = index === 0;
 
               return (
-                <div key={res.id} className={`flex items-center gap-4 p-4 rounded-xl border ${isWinner ? 'bg-amber-500/10 border-amber-500/50' : 'bg-slate-900 border-slate-700'}`}>
-                  <div className="w-8 font-bold text-xl text-slate-500">#{index + 1}</div>
-                  <img src={char?.url} className="w-12 h-12 rounded-full border-2" style={{ borderColor: p.color }} />
-                  <div className="flex-1">
-                    <div className="font-bold text-lg">{p.nickname}</div>
-                    <div className="text-sm text-slate-400">{res.position ? `${res.position}° classificato` : 'Completato'}</div>
+                <div key={p.id} className={`flex flex-col sm:flex-row items-center gap-4 p-4 rounded-xl border-2 transition-all ${isFirstOverall ? 'bg-amber-500/10 border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.2)]' : 'bg-slate-900 border-slate-700'}`}>
+                  
+                  {/* PARTE SINISTRA: Posizione Generale, Avatar, Nome e Totale */}
+                  <div className="flex items-center gap-4 w-full sm:w-auto flex-1">
+                      <div className={`w-8 text-center font-black text-2xl ${isFirstOverall ? 'text-amber-400' : 'text-slate-500'}`}>
+                          {isFirstOverall ? <i className="fa-solid fa-crown drop-shadow-md"></i> : `#${index + 1}`}
+                      </div>
+                      <img src={char?.url} className="w-14 h-14 rounded-full border-2 shadow-md" style={{ borderColor: p.color }} />
+                      <div>
+                          <div className="font-bold text-xl text-white leading-tight">{p.nickname}</div>
+                          <div className="text-amber-400 font-black text-lg">Totale: {p.totalScore} pt</div>
+                      </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-2xl font-bold text-emerald-400">+{res.pointsEarned} <span className="text-sm text-slate-400">pt</span></div>
-                    <div className="text-xs text-slate-500">Totale: {p.totalScore} pt</div>
+
+                  {/* PARTE DESTRA: Riepilogo Minigioco */}
+                  <div className="w-full sm:w-auto bg-slate-800 border border-slate-600 rounded-xl px-4 py-2 flex items-center justify-between sm:justify-center gap-4 shadow-inner">
+                      <div className="flex flex-col items-center">
+                         <span className="text-[10px] text-slate-400 uppercase tracking-widest">Minigioco</span>
+                         <span className="font-bold text-slate-200 text-lg">{roundPos}° <span className="text-xs font-normal text-slate-500">posto</span></span>
+                      </div>
+                      <div className="w-px h-8 bg-slate-600"></div>
+                      <div className="flex flex-col items-center">
+                         <span className="text-[10px] text-emerald-400 uppercase tracking-widest">Punti Vinti</span>
+                         <span className="font-black text-emerald-400 text-lg">+{roundPts}</span>
+                      </div>
                   </div>
+                  
                 </div>
               );
             })}
           </div>
 
           {isHost ? (
-            <button onClick={nextAction} className="w-full bg-indigo-600 hover:bg-indigo-500 py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 transition-all">
+            <button onClick={nextAction} className="w-full bg-indigo-600 hover:bg-indigo-500 py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 transition-all shadow-lg active:scale-95 border-b-4 border-indigo-800 active:border-b-0 active:translate-y-1">
               {isFinalRound ? 'Vedi Classifica Finale' : `Inizia Round ${currentRound + 1}`} <i className="fa-solid fa-arrow-right text-[20px]"></i>
             </button>
           ) : (
-            <div className="text-center p-4 bg-slate-900 rounded-xl text-slate-400">
+            <div className="text-center p-4 bg-slate-900 rounded-xl border border-slate-700 text-slate-400 font-bold animate-pulse">
               In attesa che l'host continui...
             </div>
           )}
@@ -5292,8 +5372,8 @@
       const [isAnimatingDice, setIsAnimatingDice] = useState(false);
       const [prevBoards, setPrevBoards] = useState(gameState.boards);
 
-      const LADDERS = { 5: 34, 20: 39, 56: 74, 11: 33, 71: 88 };
-      const SNAKES = { 24: 3, 49: 14, 97: 61, 91: 73, 51: 11, 79: 59 };
+      const LADDERS = { 5: 34, 20: 39, 56: 74, 11: 33, 71: 88, 44: 64 };
+      const SNAKES = { 24: 3, 49: 14, 97: 61, 91: 73, 51: 11, 79: 59, 67: 47 };
 
       // Sound Engine per Dadi e Movimenti
       const playSound = (type) => {
@@ -5708,23 +5788,45 @@
                       {Object.entries(SNAKES).map(([start, end]) => {
                           const p1 = getCellPos(start);
                           const p2 = getCellPos(end);
-                          // Genera una curva a "S" calcolando le coordinate dei punti di controllo
+                          // Genera una curva a "S" più pronunciata calcolando le coordinate dei punti di controllo
                           const dx = p2.x - p1.x;
                           const dy = p2.y - p1.y;
-                          const nx = -dy * 0.25;
-                          const ny = dx * 0.25;
+                          const nx = -dy * 0.35;
+                          const ny = dx * 0.35;
                           const cx1 = p1.x + dx * 0.3 + nx;
                           const cy1 = p1.y + dy * 0.3 + ny;
                           const cx2 = p1.x + dx * 0.7 - nx;
                           const cy2 = p1.y + dy * 0.7 - ny;
+                          
+                          // Calcola l'angolo per la testa (dal primo punto di controllo verso la partenza)
+                          const headAngle = Math.atan2(p1.y - cy1, p1.x - cx1) * (180 / Math.PI);
+
                           return (
                               <g key={`s_${start}`}>
-                                  {/* Corpo scuro e spesso del serpente */}
-                                  <path d={`M ${p1.x} ${p1.y} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${p2.x} ${p2.y}`} fill="none" stroke="#7F1D1D" strokeWidth="3" opacity="0.9" />
-                                  {/* Corpo luminoso */}
-                                  <path d={`M ${p1.x} ${p1.y} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${p2.x} ${p2.y}`} fill="none" stroke="#EF4444" strokeWidth="1.5" strokeLinecap="round" filter="url(#glow)" />
-                                  {/* Testa del serpente all'inizio (la casella più alta) */}
-                                  <circle cx={p1.x} cy={p1.y} r="2" fill="#EF4444" stroke="#7F1D1D" strokeWidth="0.5" filter="url(#glow)" />
+                                  {/* Ombra e contorno scuro */}
+                                  <path d={`M ${p1.x} ${p1.y} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${p2.x} ${p2.y}`} fill="none" stroke="#450a0a" strokeWidth="4.5" strokeLinecap="round" />
+                                  
+                                  {/* Corpo Base Rosso */}
+                                  <path d={`M ${p1.x} ${p1.y} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${p2.x} ${p2.y}`} fill="none" stroke="#ef4444" strokeWidth="3" strokeLinecap="round" />
+                                  
+                                  {/* Pattern squame/strisce gialle */}
+                                  <path d={`M ${p1.x} ${p1.y} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${p2.x} ${p2.y}`} fill="none" stroke="#facc15" strokeWidth="3" strokeDasharray="1 3.5" strokeLinecap="round" />
+                                  
+                                  {/* Coda (estremità inferiore affusolata) */}
+                                  <circle cx={p2.x} cy={p2.y} r="1.5" fill="#ef4444" />
+
+                                  {/* Testa del serpente */}
+                                  <g transform={`translate(${p1.x}, ${p1.y}) rotate(${headAngle + 90})`}>
+                                      {/* Lingua biforcuta */}
+                                      <path d="M 0 -3.5 L 0 -5.5 M 0 -5.5 L -1.5 -7 M 0 -5.5 L 1.5 -7" fill="none" stroke="#fca5a5" strokeWidth="0.6" strokeLinecap="round" strokeLinejoin="round" />
+                                      {/* Forma della testa (a diamante) */}
+                                      <path d="M 0 -4 L 2.5 -0.5 L 1.5 2 L -1.5 2 L -2.5 -0.5 Z" fill="#ef4444" stroke="#450a0a" strokeWidth="0.8" strokeLinejoin="round" />
+                                      {/* Occhi cattivi neri con puntino bianco */}
+                                      <circle cx="-1.2" cy="-1.5" r="0.8" fill="#000" />
+                                      <circle cx="1.2" cy="-1.5" r="0.8" fill="#000" />
+                                      <circle cx="-1.2" cy="-1.8" r="0.3" fill="#fff" />
+                                      <circle cx="1.2" cy="-1.8" r="0.3" fill="#fff" />
+                                  </g>
                               </g>
                           );
                       })}
