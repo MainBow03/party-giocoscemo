@@ -127,7 +127,10 @@
 
     const MINIGAMES = [
       { id: 'fabbrica_dadi', name: 'La Fabbrica dei Dadi', icon: 'fa-solid fa-cubes', description: 'Tutti giocano contemporaneamente! Fase 1: Lancia il tuo dado (cooldown 3s). Clicca sulla colonna del numero uscito per riempirla. Completa 4 colonne per sbloccare i tuoi dadi personalizzati! Fase 2: Corsa finale! Il tuo dado avrà solo i 4 numeri sbloccati. Arriva alla casella 45 per vincere!' },
+      { id: 'cassafortiere', name: 'Il Cassafortiere', icon: 'fa-solid fa-vault', description: 'Tutti in contemporanea! Ognuno deve aprire 3 casseforti segrete in sequenza (da 3, 5 e 8 cifre). Inserisci un codice e ricevi gli indizi: Verde = Numero al posto giusto. Giallo = Numero presente ma nel posto sbagliato. Grigio = Assente. Chi apre la terza cassaforte per primo vince!' },
       { id: 'scaccia_numeri', name: 'Scaccia Numeri', icon: 'fa-solid fa-dice', description: 'Lancia i dadi e clicca sui numeri per eliminarli dal tuo tabellone. Puoi usare i dadi singolarmente o sommarli. Il primo che elimina tutti i numeri vince!' },
+      { id: 'palloncino', name: 'Il Palloncino', icon: 'fa-solid fa-burst', description: 'Gonfia il tuo palloncino cliccando, ma attento a non farlo scoppiare! Ognuno ha un limite segreto diverso in ogni round. Fermati prima che esploda! Si giocano 5 round: il palloncino intero più grande prende 5 punti, il secondo 4, ecc. Se scoppi, 0 punti!' },
+      { id: 'sette_mezzo', name: 'Sette e Mezzo', icon: 'fa-solid fa-money-bill-wave', description: 'Azzardo puro! 10 turni per sfidare il Banco in contemporanea. Avvicinati al 7.5 senza sballare. +1.5 se batti il banco, +2 se fai 7.5, -0.5 se sballi. Chi farà più punti in 10 turni?' },
       { id: 'sentiero_invisibile', name: 'Il Sentiero Invisibile', icon: 'fa-solid fa-shoe-prints', description: 'Trova il percorso sicuro dal basso verso l\'alto! Clicca sulle caselle adiacenti per avanzare. Se sbagli, cadi e il turno passa: dovrai ricordare il percorso corretto al tuo prossimo turno!' },
       { id: 'snake_ladders', name: 'Scale e Serpenti', icon: 'fa-solid fa-staff-snake', description: 'Lancia due dadi per arrivare alla casella 100. Attento ai serpenti e ai bidoni, ma sfrutta le scale e le stelle per vincere!' },
       { id: 'ricordello', name: 'Ricordello', icon: 'fa-solid fa-brain', description: 'Trova le carte in ordine da 1 a 10. Se sbagli, il turno passa al prossimo giocatore e le carte si rigirano. Allena la tua memoria!' },
@@ -139,6 +142,19 @@
       { id: 'indovina_numero', name: 'Indovina il Numero', icon: 'fa-solid fa-question', description: 'Scegli un numero segreto da 1 a 999. A turno, ogni giocatore cerca di indovinare il numero del giocatore successivo, che risponderà se il numero corretto è Più Alto o Più Basso!' }
     ];
     const POINTS_SYSTEM = [10, 6, 4, 2];
+
+    const drawSetteMezzoCard = () => {
+        const suits = ['Denari', 'Coppe', 'Spade', 'Bastoni'];
+        const values = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+        const v = values[Math.floor(Math.random() * values.length)];
+        const s = suits[Math.floor(Math.random() * suits.length)];
+        let points = v > 7 ? 0.5 : v;
+        let name = v.toString();
+        if (v === 8) name = 'Fante';
+        if (v === 9) name = 'Cavallo';
+        if (v === 10) name = 'Re';
+        return { name, suit: s, points, id: Math.random().toString(36).substr(2, 9) };
+    };
 
     const generateInvisiblePath = (rows = 6, cols = 6) => {
         const path = [];
@@ -165,6 +181,74 @@
     const getInitialGameState = (gameId, turnOrder, shouldShuffle = false) => {
       const activeOrder = shouldShuffle ? [...turnOrder].sort(() => Math.random() - 0.5) : [...turnOrder];
       
+      if (gameId === 'palloncino') {
+        const initialScores = {};
+        const currentPumps = {};
+        const status = {};
+        const secretLimits = {};
+        
+        activeOrder.forEach(id => {
+            initialScores[id] = 0;
+            currentPumps[id] = 0;
+            status[id] = 'pumping'; // 'pumping', 'stood', 'popped'
+            secretLimits[id] = Math.floor(Math.random() * (35 - 15 + 1)) + 15; // Random tra 15 e 35
+        });
+
+        return {
+            gameId, turnOrder: activeOrder,
+            phase: 'playing', // 'playing', 'round_results'
+            currentMinigameRound: 1,
+            minigameScores: initialScores,
+            currentPumps, status, secretLimits,
+            finishedPlayers: [], isGameOver: false
+        };
+      }
+
+      if (gameId === 'sette_mezzo') {
+        const initialScores = {};
+        const initialHands = {};
+        const initialStatus = {};
+        activeOrder.forEach(id => {
+            initialScores[id] = 0;
+            initialHands[id] = [drawSetteMezzoCard()];
+            initialStatus[id] = 'playing'; // 'playing', 'stood', 'busted'
+        });
+        return {
+            gameId, turnOrder: activeOrder,
+            phase: 'playing', // 'playing', 'bank_turn', 'round_results'
+            minigameRound: 1,
+            scores: initialScores,
+            hands: initialHands,
+            status: initialStatus,
+            bankHand: [drawSetteMezzoCard()],
+            finishedPlayers: [],
+            isGameOver: false
+        };
+      }
+
+      if (gameId === 'cassafortiere') {
+        const secretCodes = {};
+        const guessHistories = {};
+        const currentSafe = {};
+        
+        activeOrder.forEach(id => {
+            // Genera 3 codici univoci per ognuno: 3, 5 e 8 cifre
+            const code1 = Array.from({length: 3}, () => Math.floor(Math.random() * 10)).join('');
+            const code2 = Array.from({length: 5}, () => Math.floor(Math.random() * 10)).join('');
+            const code3 = Array.from({length: 8}, () => Math.floor(Math.random() * 10)).join('');
+            
+            secretCodes[id] = [code1, code2, code3];
+            guessHistories[id] = [];
+            currentSafe[id] = 0; // Parte dalla prima cassaforte (index 0)
+        });
+
+        return {
+            gameId, turnOrder: activeOrder,
+            secretCodes, guessHistories, currentSafe,
+            finishedPlayers: [], isGameOver: false
+        };
+      }
+
       if (gameId === 'fabbrica_dadi') {
         const initialGrids = {};
         const initialUnlocked = {};
@@ -202,22 +286,6 @@
            gameId, turnOrder: activeOrder, activePlayerIndex: 0,
            phase: 'choosing_number', secretNumbers: {}, targets, guessHistory,
            finishedPlayers: [], isGameOver: false, currentGuessResult: null
-        };
-      }
-
-      if (gameId === 'corsa_cavalli') {
-        const deck = [];
-        for (let i = 0; i < 8; i++) {
-           for (let j = 0; j < 10; j++) deck.push(i);
-        }
-        for (let i = deck.length - 1; i > 0; i--) {
-           const j = Math.floor(Math.random() * (i + 1));
-           [deck[i], deck[j]] = [deck[j], deck[i]];
-        }
-        return {
-           gameId, turnOrder: activeOrder, phase: 'betting', bets: {},
-           horsesProgress: [0,0,0,0,0,0,0,0], deck, currentCardIndex: 0,
-           revealedHorse: null, isGameOver: false, finishedPlayers: []
         };
       }
 
@@ -350,7 +418,8 @@
             boards: initialBoards, finishedPlayers: [],
             dice: [0, 0], hasRolled: false, pendingAction: null,
             targetCell: null, specialAmount: 0,
-            boardSetup: { stars, bins }
+            boardSetup: { stars, bins },
+            closingRoundsLeft: null
         };
       }
 
@@ -996,6 +1065,15 @@
       }
       if (gameState.gameId === 'scaccia_numeri') {
         return <ScacciaNumeriGame user={user} roomData={roomData} roomId={roomId} updateRoom={updateRoom} isLocal={isLocal} />;
+      }
+      if (gameState.gameId === 'palloncino') {
+        return <PalloncinoGame user={isLocal ? user : originalUser} roomData={roomData} roomId={roomId} updateRoom={updateRoom} isLocal={isLocal} />;
+      }
+      if (gameState.gameId === 'sette_mezzo') {
+        return <SetteMezzoGame user={isLocal ? user : originalUser} roomData={roomData} roomId={roomId} updateRoom={updateRoom} isLocal={isLocal} />;
+      }
+      if (gameState.gameId === 'cassafortiere') {
+        return <CassafortiereGame user={isLocal ? user : originalUser} roomData={roomData} roomId={roomId} updateRoom={updateRoom} isLocal={isLocal} />;
       }
       if (gameState.gameId === 'sentiero_invisibile') {
         return <SentieroInvisibileGame user={isLocal ? user : originalUser} roomData={roomData} roomId={roomId} updateRoom={updateRoom} isLocal={isLocal} />;
@@ -1711,16 +1789,16 @@
                 const horseId = gameState.deck[cardIdx];
                 const newProgress = [...gameState.horsesProgress];
                 
-                // Avanza solo se non ha già superato il traguardo
-                if (newProgress[horseId] < 10) {
-                    newProgress[horseId] += 1;
+                // Avanza solo se non ha già superato il traguardo (con failsafe)
+                if ((newProgress[horseId] || 0) < 10) {
+                    newProgress[horseId] = (newProgress[horseId] || 0) + 1;
                 }
 
                 let isOver = false;
                 let newFinishedPlayers = [...(gameState.finishedPlayers || [])];
 
                 // Controlla se il cavallo arrivato al traguardo appartiene a qualcuno
-                if (newProgress[horseId] >= 10) {
+                if ((newProgress[horseId] || 0) >= 10) {
                     const ownerUid = Object.keys(gameState.bets).find(uid => gameState.bets[uid] === horseId);
                     if (ownerUid && !newFinishedPlayers.includes(ownerUid)) {
                         newFinishedPlayers.push(ownerUid); // Aggiunto alla classifica nell'ordine di arrivo!
@@ -2634,13 +2712,13 @@
 
           if (card.type === 'number') {
               let target = currentPos + card.value;
-              if (target > 40) target = 40;
+              if (target > 45) target = 45;
               updates['gameState.targetCell'] = target;
               updates['gameState.pendingAction'] = 'click_to_move';
           } else {
               if (card.value === 'stop') {
                   let target = currentPos + 1;
-                  if (target > 40) target = 40;
+                  if (target > 45) target = 45;
                   // Trova il prossimo per skipparlo
                   const nextInfo = passTurn(gameState);
                   const nextUidToSkip = gameState.turnOrder[nextInfo.nextIdx];
@@ -2691,7 +2769,7 @@
       const resolveMovementEnd = (finalPos) => {
           let updates = {};
           
-          if (finalPos === 40) {
+          if (finalPos === 45) {
               playSound('special');
               const newFinished = [...gameState.finishedPlayers, activePlayerId];
               updates['gameState.finishedPlayers'] = newFinished;
@@ -2704,7 +2782,13 @@
           } else if ([5, 15, 25, 35].includes(finalPos)) {
               playSound('special');
               updates['gameState.pendingAction'] = 'plus_two_bonus';
-          } else if ([10, 20, 30].includes(finalPos)) {
+          } else if ([7, 17, 27, 37].includes(finalPos)) {
+              playSound('bad');
+              updates['gameState.pendingAction'] = 'minus_two_cell';
+          } else if (finalPos === 39) {
+              playSound('special');
+              updates['gameState.pendingAction'] = 'x2_bonus';
+          } else if ([10, 20, 30, 40].includes(finalPos)) {
               playSound('special');
               updates['gameState.pendingAction'] = 'guess_uno';
           } else {
@@ -2721,8 +2805,26 @@
       const handlePlusTwo = () => {
           if (!isMyTurn || gameState.pendingAction !== 'plus_two_bonus') return;
           let target = gameState.boards[activePlayerId] + 2;
-          if (target > 40) target = 40;
+          if (target > 45) target = 45;
           updateRoom({ 'gameState.targetCell': target, 'gameState.pendingAction': 'click_to_move' });
+      };
+
+      const handleMinusTwoCell = () => {
+          if (!isMyTurn || gameState.pendingAction !== 'minus_two_cell') return;
+          let target = gameState.boards[activePlayerId] - 2;
+          if (target < 0) target = 0;
+          updateRoom({ 'gameState.targetCell': target, 'gameState.pendingAction': 'click_to_move' });
+      };
+
+      const handleX2Bonus = () => {
+          if (!isMyTurn || gameState.pendingAction !== 'x2_bonus') return;
+          playSound('draw');
+          const colors = ['#EF4444', '#3B82F6', '#EAB308', '#10B981'];
+          const val = Math.floor(Math.random() * 9) + 1;
+          const card = { type: 'number', value: val * 2, color: colors[Math.floor(Math.random() * 4)] };
+          let target = gameState.boards[activePlayerId] + card.value;
+          if (target > 45) target = 45;
+          updateRoom({ 'gameState.currentCard': card, 'gameState.targetCell': target, 'gameState.pendingAction': 'click_to_move' });
       };
 
       const handleMinusTwoSelect = (targetUid) => {
@@ -2755,7 +2857,7 @@
           if (drawnCard.color === gameState.unoGuess) {
               playSound('special');
               target = gameState.boards[activePlayerId] + drawnCard.value;
-              if (target > 40) target = 40;
+              if (target > 45) target = 45;
           } else {
               playSound('bad');
               target = gameState.boards[activePlayerId] - 3;
@@ -2771,18 +2873,20 @@
 
       // Costruzione Tabellone a Serpentina
       const boardCells = [];
-      for(let i=0; i<=40; i++) boardCells.push(i);
+      for(let i=0; i<=45; i++) boardCells.push(i);
       
       const rows = [];
-      for(let i=0; i<=40; i+=10) rows.push(boardCells.slice(i, i+10));
+      for(let i=0; i<=45; i+=10) rows.push(boardCells.slice(i, i+10));
       if (rows[1]) rows[1].reverse();
       if (rows[3]) rows[3].reverse();
       const flatBoard = rows.flat();
 
       const getCellColorClass = (cell) => {
-          if (cell === 40) return 'bg-checkered';
-          if ([10, 20, 30].includes(cell)) return 'bg-rainbow';
+          if (cell === 45) return 'bg-checkered';
+          if ([10, 20, 30, 40].includes(cell)) return 'bg-rainbow';
           if ([5, 15, 25, 35].includes(cell)) return 'bg-emerald-500';
+          if ([7, 17, 27, 37].includes(cell)) return 'bg-red-500';
+          if (cell === 39) return 'bg-fuchsia-500';
           return 'bg-slate-700';
       };
 
@@ -2869,6 +2973,18 @@
                           </button>
                       )}
 
+                      {gameState.pendingAction === 'minus_two_cell' && (
+                          <button onClick={handleMinusTwoCell} className="bg-red-500 hover:bg-red-400 text-white font-black px-8 py-4 rounded-xl shadow-lg border-b-4 border-red-700 active:border-b-0 active:translate-y-1">
+                             TRAPPOLA! INDIETREGGIA DI -2
+                          </button>
+                      )}
+
+                      {gameState.pendingAction === 'x2_bonus' && (
+                          <button onClick={handleX2Bonus} className="bg-fuchsia-500 hover:bg-fuchsia-400 text-white font-black px-8 py-4 rounded-xl shadow-lg border-b-4 border-fuchsia-700 active:border-b-0 active:translate-y-1">
+                             BONUS x2! PESCA CARTA
+                          </button>
+                      )}
+
                       {gameState.pendingAction === 'select_minus_two' && (
                           <div className="w-full text-center">
                              <p className="text-red-400 font-bold mb-4">A chi vuoi dare -2 caselle?</p>
@@ -2932,9 +3048,11 @@
                        const occupants = gameState.turnOrder.filter(uid => gameState.boards[uid] === cellNum && !finishedPlayers.includes(uid));
 
                        const isPlusTwo = [5, 15, 25, 35].includes(cellNum);
-                       const isUno = [10, 20, 30].includes(cellNum);
+                       const isMinusTwo = [7, 17, 27, 37].includes(cellNum);
+                       const isX2 = cellNum === 39;
+                       const isUno = [10, 20, 30, 40].includes(cellNum);
                        const isStart = cellNum === 0;
-                       const isEnd = cellNum === 40;
+                       const isEnd = cellNum === 45;
 
                        return (
                            <div key={cellNum} 
@@ -2942,6 +3060,8 @@
                                 className={`aspect-square rounded-md border-2 relative flex items-center justify-center transition-all overflow-hidden ${getCellColorClass(cellNum)} ${isTarget ? 'border-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.8)] animate-pulse cursor-pointer z-20 scale-110' : 'border-slate-800'}`}>
                                
                                {isPlusTwo && <div className="absolute inset-0 flex items-center justify-center text-white/50 font-black text-2xl md:text-3xl z-0">+2</div>}
+                               {isMinusTwo && <div className="absolute inset-0 flex items-center justify-center text-white/50 font-black text-2xl md:text-3xl z-0">-2</div>}
+                               {isX2 && <div className="absolute inset-0 flex items-center justify-center text-white/50 font-black text-2xl md:text-3xl z-0">x2</div>}
                                {isUno && <div className="absolute inset-0 flex items-center justify-center text-white/90 font-black text-lg md:text-2xl italic tracking-tighter drop-shadow-md z-0">UNO</div>}
                                {isStart && <div className="absolute inset-0 flex items-center justify-center text-white/30 font-black text-sm md:text-lg z-0">VIA</div>}
                                {isEnd && <div className="absolute inset-0 flex items-center justify-center text-white/80 z-0"><i className="fa-solid fa-flag-checkered text-2xl md:text-4xl drop-shadow-lg"></i></div>}
@@ -2976,6 +3096,893 @@
     }
 
     // ==========================================
+    // MINIGIOCO: IL PALLONCINO
+    // ==========================================
+    function PalloncinoGame({ user, roomData, roomId, updateRoom, isLocal }) {
+      const { gameState, players } = roomData;
+      const isHost = isLocal || roomData.hostId === user.uid;
+      const { phase, currentMinigameRound, minigameScores, currentPumps, status, secretLimits, turnOrder } = gameState;
+
+      const playSound = (type) => {
+        try {
+          const ctx = new (window.AudioContext || window.webkitAudioContext)();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          
+          if (type === 'pump') {
+            osc.type = 'triangle'; osc.frequency.setValueAtTime(300, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(600, ctx.currentTime + 0.1);
+            gain.gain.setValueAtTime(0, ctx.currentTime); gain.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.05); gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.1);
+            osc.start(); osc.stop(ctx.currentTime + 0.1);
+          } else if (type === 'pop') {
+            osc.type = 'sawtooth'; osc.frequency.setValueAtTime(100, ctx.currentTime);
+            osc.frequency.linearRampToValueAtTime(10, ctx.currentTime + 0.3);
+            gain.gain.setValueAtTime(0.5, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+            osc.start(); osc.stop(ctx.currentTime + 0.3);
+          } else if (type === 'stand') {
+            osc.type = 'sine'; osc.frequency.setValueAtTime(800, ctx.currentTime);
+            gain.gain.setValueAtTime(0.2, ctx.currentTime); gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.2);
+            osc.start(); osc.stop(ctx.currentTime + 0.2);
+          }
+        } catch (e) {}
+      };
+
+      // Failsafe Fine Partita Minigioco Globale
+      useEffect(() => {
+        if (gameState.isGameOver && roomData.status === 'playing' && isHost) {
+          const timeout = setTimeout(() => {
+            const results = gameState.finishedPlayers.map((id, index) => ({ id, position: index + 1 }));
+            const pointsUpdate = {};
+            results.forEach((res, index) => {
+              const pts = POINTS_SYSTEM[index] || 0; res.pointsEarned = pts;
+              pointsUpdate[`players.${res.id}.totalScore`] = players[res.id].totalScore + pts;
+            });
+            updateRoom({ status: 'round_results', 'gameState.results': results, ...pointsUpdate });
+          }, 3000);
+          return () => clearTimeout(timeout);
+        }
+      }, [gameState.isGameOver, roomData.status, isHost, updateRoom, players, gameState.finishedPlayers]);
+
+      // Host Orchestration: Fine Round del Palloncino
+      useEffect(() => {
+        if (!isHost || gameState.isGameOver || phase !== 'playing') return;
+
+        const allDone = turnOrder.every(uid => status[uid] !== 'pumping');
+        if (allDone) {
+            // Calcolo punteggi di fine round
+            const newScores = { ...minigameScores };
+            const roundRankings = []; // Array per sapere chi ha preso quanti punti questo round
+            
+            // Ordina i giocatori che si sono fermati (non scoppiati) per numero di pompate (descrescente)
+            const stoodPlayers = turnOrder.filter(uid => status[uid] === 'stood')
+                                          .sort((a, b) => currentPumps[b] - currentPumps[a]);
+            
+            // Assegna: 1°=5, 2°=4, 3°=3, ecc.
+            let pointsToGive = 5;
+            stoodPlayers.forEach(uid => {
+                const pts = Math.max(1, pointsToGive); // Minimo 1 punto se ti sei salvato
+                newScores[uid] += pts;
+                roundRankings.push({ uid, pts, pops: currentPumps[uid], popped: false });
+                pointsToGive--;
+            });
+
+            // Chi è scoppiato prende 0
+            turnOrder.forEach(uid => {
+                if (status[uid] === 'popped') {
+                    roundRankings.push({ uid, pts: 0, pops: currentPumps[uid], popped: true });
+                }
+            });
+
+            updateRoom({
+                'gameState.phase': 'round_results',
+                'gameState.minigameScores': newScores,
+                'gameState.lastRoundRankings': roundRankings
+            });
+        }
+      }, [isHost, phase, status, turnOrder, currentPumps, minigameScores, gameState.isGameOver]);
+
+      // Host Orchestration: Passaggio al prossimo round
+      useEffect(() => {
+          if (!isHost || phase !== 'round_results' || gameState.isGameOver) return;
+          
+          const to = setTimeout(() => {
+              if (currentMinigameRound >= 5) {
+                  // Fine di tutti i 5 round: stila classifica finale del minigioco
+                  const sorted = [...turnOrder].sort((a,b) => minigameScores[b] - minigameScores[a]);
+                  updateRoom({
+                      'gameState.finishedPlayers': sorted,
+                      'gameState.isGameOver': true
+                  });
+              } else {
+                  // Prepara il nuovo round
+                  const newPumps = {};
+                  const newStatus = {};
+                  const newLimits = {};
+                  turnOrder.forEach(uid => {
+                      newPumps[uid] = 0;
+                      newStatus[uid] = 'pumping';
+                      newLimits[uid] = Math.floor(Math.random() * (35 - 15 + 1)) + 15;
+                  });
+
+                  updateRoom({
+                      'gameState.currentMinigameRound': currentMinigameRound + 1,
+                      'gameState.currentPumps': newPumps,
+                      'gameState.status': newStatus,
+                      'gameState.secretLimits': newLimits,
+                      'gameState.phase': 'playing'
+                  });
+              }
+          }, 4500); // 4.5 secondi per vedere i risultati del round
+          return () => clearTimeout(to);
+      }, [isHost, phase, currentMinigameRound, turnOrder, minigameScores, gameState.isGameOver]);
+
+
+      const handlePump = (uid) => {
+          if (!isLocal && user.uid !== uid) return;
+          if (status[uid] !== 'pumping') return;
+
+          const newPumps = currentPumps[uid] + 1;
+          const limit = secretLimits[uid];
+
+          if (newPumps >= limit) {
+              playSound('pop');
+              updateRoom({
+                  [`gameState.currentPumps.${uid}`]: newPumps,
+                  [`gameState.status.${uid}`]: 'popped'
+              });
+          } else {
+              playSound('pump');
+              updateRoom({ [`gameState.currentPumps.${uid}`]: newPumps });
+          }
+      };
+
+      const handleStand = (uid) => {
+          if (!isLocal && user.uid !== uid) return;
+          if (status[uid] !== 'pumping') return;
+          if (currentPumps[uid] === 0) return; // Non puoi fermarti a 0
+
+          playSound('stand');
+          updateRoom({ [`gameState.status.${uid}`]: 'stood' });
+      };
+
+      return (
+        <div className="flex flex-col h-full gap-4 select-none">
+          {/* HEADER */}
+          <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 shadow-md flex justify-between items-center">
+             <div>
+                <h2 className="text-xl font-bold text-rose-400"><i className="fa-solid fa-burst mr-2"></i>Il Palloncino</h2>
+                <p className="text-xs text-slate-400">Round {currentMinigameRound} di 5</p>
+             </div>
+             <div className="flex gap-2 text-[10px] md:text-xs font-bold text-slate-400">
+                <span className="bg-slate-900 px-2 py-1 rounded">1°: 5pt</span>
+                <span className="bg-slate-900 px-2 py-1 rounded">2°: 4pt</span>
+                <span className="bg-slate-900 px-2 py-1 rounded text-red-400">Scoppio: 0pt</span>
+             </div>
+          </div>
+
+          {/* MAIN AREA */}
+          <div className="flex-1 bg-slate-900 rounded-2xl border-4 border-slate-700 shadow-inner p-4 relative overflow-hidden flex flex-col">
+             
+             {/* OVERLAY RISULTATI ROUND */}
+             {phase === 'round_results' && !gameState.isGameOver && (
+                 <div className="absolute inset-0 bg-slate-900/90 z-50 flex flex-col items-center justify-center p-4 backdrop-blur-sm animate-[spinCard_0.3s_ease-out]">
+                     <h2 className="text-3xl font-black text-white mb-6 uppercase tracking-widest">Risultati Round {currentMinigameRound}</h2>
+                     <div className="flex flex-col gap-3 w-full max-w-md">
+                         {(gameState.lastRoundRankings || []).map((rank, i) => (
+                             <div key={i} className={`flex items-center gap-3 p-3 rounded-xl border-2 ${rank.popped ? 'bg-red-900/40 border-red-500/50' : 'bg-slate-800 border-slate-600'}`}>
+                                 <img src={CHARACTERS.find(c=>c.id===players[rank.uid].character)?.url} className="w-10 h-10 rounded-full border-2" style={{borderColor: players[rank.uid].color}} />
+                                 <div className="flex-1">
+                                     <div className="font-bold text-white">{players[rank.uid].nickname}</div>
+                                     <div className="text-xs text-slate-400">{rank.popped ? 'Scoppiato!' : `Fermato a ${rank.pops}`}</div>
+                                 </div>
+                                 <div className={`text-2xl font-black ${rank.popped ? 'text-red-500' : 'text-emerald-400'}`}>
+                                     +{rank.pts}
+                                 </div>
+                             </div>
+                         ))}
+                     </div>
+                 </div>
+             )}
+
+             {/* GRIGLIA GIOCATORI */}
+             <div className="flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                 {turnOrder.map(uid => {
+                     const p = players[uid];
+                     const isMe = isLocal || user.uid === uid;
+                     const pStat = status[uid];
+                     const pumps = currentPumps[uid] || 0;
+                     const score = minigameScores[uid] || 0;
+                     
+                     // Calcolo dimensione e tremolio del palloncino
+                     const baseSize = 50;
+                     const scaleFactor = 1 + (pumps * 0.08); // Cresce dell'8% ad ogni pump
+                     const isHuge = pumps >= 20;
+                     
+                     return (
+                         <div key={uid} className={`bg-slate-800 rounded-2xl p-4 border-2 flex flex-col items-center justify-between transition-all relative
+                             ${isMe && pStat === 'pumping' ? 'border-rose-400 shadow-[0_0_15px_rgba(251,113,133,0.2)]' : 'border-slate-700'}`}>
+                             
+                             <div className="w-full flex justify-between items-start z-20">
+                                 <div className="flex items-center gap-2 bg-slate-900/50 px-2 py-1 rounded-lg">
+                                     <img src={CHARACTERS.find(c=>c.id===p.character)?.url} className="w-8 h-8 rounded-full border-2" style={{borderColor: p.color}} />
+                                     <div className="flex flex-col">
+                                         <span className="font-bold text-xs text-white truncate max-w-[80px]">{p.nickname}</span>
+                                         <span className="text-[10px] text-amber-400 font-black">{score} PT</span>
+                                     </div>
+                                 </div>
+                                 <div className="bg-slate-900 text-slate-400 font-bold px-3 py-1 rounded-lg border border-slate-600">
+                                     {pumps}
+                                 </div>
+                             </div>
+
+                             {/* ZONA PALLONCINO */}
+                             <div className="flex-1 flex items-center justify-center w-full min-h-[150px] relative">
+                                 {pStat === 'popped' ? (
+                                     <div className="animate-bounce flex flex-col items-center">
+                                         <i className="fa-solid fa-burst text-6xl text-red-500 drop-shadow-[0_0_15px_rgba(239,68,68,0.8)]"></i>
+                                         <span className="mt-2 text-red-400 font-black uppercase">Scoppiato!</span>
+                                     </div>
+                                 ) : (
+                                     <div className="relative flex flex-col items-center justify-end"
+                                          style={{
+                                              transform: `scale(${scaleFactor})`,
+                                              transition: 'transform 0.1s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+                                          }}>
+                                         
+                                         {/* Palloncino */}
+                                         <div className={`relative flex justify-center items-end ${isHuge && pStat === 'pumping' ? 'animate-[shake_0.5s_infinite]' : ''}`}
+                                              style={{ 
+                                                  width: `${baseSize}px`, 
+                                                  height: `${baseSize * 1.2}px`,
+                                                  backgroundColor: p.color,
+                                                  borderRadius: '50% 50% 50% 50% / 40% 40% 60% 60%',
+                                                  boxShadow: `inset -10px -10px 20px rgba(0,0,0,0.3), inset 5px 5px 15px rgba(255,255,255,0.4)`
+                                              }}>
+                                              
+                                              {/* Nodo */}
+                                              <div className="absolute -bottom-1 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-b-[8px]"
+                                                   style={{ borderBottomColor: p.color }}></div>
+                                              
+                                              {pStat === 'stood' && (
+                                                  <div className="absolute inset-0 flex items-center justify-center">
+                                                      <i className="fa-solid fa-lock text-white/50 text-xl drop-shadow-md"></i>
+                                                  </div>
+                                              )}
+                                         </div>
+                                     </div>
+                                 )}
+                             </div>
+
+                             {/* CONTROLLI */}
+                             <div className="w-full flex gap-2 mt-4 z-20">
+                                 {phase === 'playing' ? (
+                                     isMe && pStat === 'pumping' ? (
+                                         <>
+                                             <button onClick={() => handlePump(uid)} 
+                                                     className="flex-1 bg-rose-600 hover:bg-rose-500 text-white font-black py-4 rounded-xl shadow-lg border-b-4 border-rose-800 active:border-b-0 active:translate-y-1 transition-all text-xl">
+                                                 GONFIA
+                                             </button>
+                                             <button onClick={() => handleStand(uid)} disabled={pumps === 0}
+                                                     className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-600 disabled:border-slate-800 text-white font-bold py-4 rounded-xl shadow-lg border-b-4 border-emerald-800 active:border-b-0 active:translate-y-1 transition-all text-sm">
+                                                 FERMATI
+                                             </button>
+                                         </>
+                                     ) : (
+                                         <div className="w-full bg-slate-900/50 py-4 rounded-xl text-center font-bold text-slate-400 border border-slate-700">
+                                             {pStat === 'pumping' ? 'Sta gonfiando...' : pStat === 'popped' ? 'BOOM!' : `Salvo a ${pumps}!`}
+                                         </div>
+                                     )
+                                 ) : (
+                                     <div className={`w-full py-4 rounded-xl text-center font-black text-white shadow-inner
+                                         ${pStat === 'popped' ? 'bg-red-900/50' : 'bg-emerald-900/50'}`}>
+                                         {pStat === 'popped' ? 'Eliminato (0pt)' : `Salvo (${pumps})`}
+                                     </div>
+                                 )}
+                             </div>
+                             
+                             {/* Stili per animazione shake locale */}
+                             <style>{`
+                                @keyframes shake {
+                                    0% { transform: translate(1px, 1px) rotate(0deg); }
+                                    10% { transform: translate(-1px, -2px) rotate(-1deg); }
+                                    20% { transform: translate(-3px, 0px) rotate(1deg); }
+                                    30% { transform: translate(3px, 2px) rotate(0deg); }
+                                    40% { transform: translate(1px, -1px) rotate(1deg); }
+                                    50% { transform: translate(-1px, 2px) rotate(-1deg); }
+                                    60% { transform: translate(-3px, 1px) rotate(0deg); }
+                                    70% { transform: translate(3px, 1px) rotate(-1deg); }
+                                    80% { transform: translate(-1px, -1px) rotate(1deg); }
+                                    90% { transform: translate(1px, 2px) rotate(0deg); }
+                                    100% { transform: translate(1px, -2px) rotate(-1deg); }
+                                }
+                             `}</style>
+                         </div>
+                     );
+                 })}
+             </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ==========================================
+    // MINIGIOCO: SETTE E MEZZO
+    // ==========================================
+    function SetteMezzoGame({ user, roomData, roomId, updateRoom, isLocal }) {
+      const { gameState, players } = roomData;
+      const isHost = isLocal || roomData.hostId === user.uid;
+      const { phase, minigameRound, scores, hands, status, bankHand, turnOrder } = gameState;
+
+      const getHandScore = (hand) => hand.reduce((sum, c) => sum + c.points, 0);
+
+      const playSound = (type) => {
+        try {
+          const ctx = new (window.AudioContext || window.webkitAudioContext)();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          
+          if (type === 'draw') {
+            osc.type = 'sine'; osc.frequency.setValueAtTime(600, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(1000, ctx.currentTime + 0.1);
+            gain.gain.setValueAtTime(0, ctx.currentTime); gain.gain.linearRampToValueAtTime(0.2, ctx.currentTime + 0.05); gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.1);
+            osc.start(); osc.stop(ctx.currentTime + 0.1);
+          } else if (type === 'bust') {
+            osc.type = 'sawtooth'; osc.frequency.setValueAtTime(200, ctx.currentTime);
+            osc.frequency.linearRampToValueAtTime(100, ctx.currentTime + 0.3);
+            gain.gain.setValueAtTime(0.2, ctx.currentTime); gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.3);
+            osc.start(); osc.stop(ctx.currentTime + 0.3);
+          } else if (type === 'win') {
+            osc.type = 'square'; osc.frequency.setValueAtTime(500, ctx.currentTime);
+            osc.frequency.setValueAtTime(800, ctx.currentTime + 0.15);
+            gain.gain.setValueAtTime(0.1, ctx.currentTime); gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.3);
+            osc.start(); osc.stop(ctx.currentTime + 0.3);
+          }
+        } catch (e) {}
+      };
+
+      // Failsafe Fine Partita Minigioco
+      useEffect(() => {
+        if (gameState.isGameOver && roomData.status === 'playing' && isHost) {
+          const timeout = setTimeout(() => {
+            const results = gameState.finishedPlayers.map((id, index) => ({ id, position: index + 1 }));
+            const pointsUpdate = {};
+            results.forEach((res, index) => {
+              const pts = POINTS_SYSTEM[index] || 0; res.pointsEarned = pts;
+              pointsUpdate[`players.${res.id}.totalScore`] = players[res.id].totalScore + pts;
+            });
+            updateRoom({ status: 'round_results', 'gameState.results': results, ...pointsUpdate });
+          }, 2000);
+          return () => clearTimeout(timeout);
+        }
+      }, [gameState.isGameOver, roomData.status, isHost, updateRoom, players, gameState.finishedPlayers]);
+
+      // Host Orchestration
+      useEffect(() => {
+        if (!isHost || gameState.isGameOver) return;
+
+        if (phase === 'playing') {
+            const allDone = turnOrder.every(uid => status[uid] !== 'playing');
+            if (allDone) {
+                updateRoom({ 'gameState.phase': 'bank_turn' });
+            }
+        } else if (phase === 'bank_turn') {
+            const bankScore = getHandScore(bankHand);
+            if (bankScore < 5.5) {
+                const to = setTimeout(() => {
+                    updateRoom({ 'gameState.bankHand': [...bankHand, drawSetteMezzoCard()] });
+                }, 1200);
+                return () => clearTimeout(to);
+            } else {
+                const to = setTimeout(() => {
+                    const newScores = { ...scores };
+                    turnOrder.forEach(uid => {
+                        const pScore = getHandScore(hands[uid]);
+                        const pStat = status[uid];
+                        
+                        if (pStat === 'busted') {
+                            newScores[uid] -= 0.5;
+                        } else if (pScore === 7.5) {
+                            newScores[uid] += 2;
+                        } else if (bankScore > 7.5) {
+                            newScores[uid] += 1.5;
+                        } else if (pScore > bankScore) {
+                            newScores[uid] += 1.5;
+                        }
+                        // Else 0 punti (pareggio col banco o sconfitta)
+                    });
+                    
+                    updateRoom({
+                        'gameState.phase': 'round_results',
+                        'gameState.scores': newScores
+                    });
+                }, 1500);
+                return () => clearTimeout(to);
+            }
+        } else if (phase === 'round_results') {
+            const to = setTimeout(() => {
+                if (minigameRound >= 10) {
+                    const sorted = [...turnOrder].sort((a,b) => scores[b] - scores[a]);
+                    updateRoom({
+                        'gameState.finishedPlayers': sorted,
+                        'gameState.isGameOver': true
+                    });
+                } else {
+                    const newHands = {};
+                    const newStatus = {};
+                    turnOrder.forEach(uid => {
+                        newHands[uid] = [drawSetteMezzoCard()];
+                        newStatus[uid] = 'playing';
+                    });
+                    updateRoom({
+                        'gameState.minigameRound': minigameRound + 1,
+                        'gameState.hands': newHands,
+                        'gameState.status': newStatus,
+                        'gameState.bankHand': [drawSetteMezzoCard()],
+                        'gameState.phase': 'playing'
+                    });
+                }
+            }, 4500);
+            return () => clearTimeout(to);
+        }
+      }, [isHost, phase, status, bankHand, minigameRound, scores, gameState.isGameOver, turnOrder]);
+
+      const handleHit = (uid) => {
+          if (!isLocal && user.uid !== uid) return;
+          if (status[uid] !== 'playing') return;
+
+          playSound('draw');
+          const newCard = drawSetteMezzoCard();
+          const newHand = [...hands[uid], newCard];
+          const newScore = getHandScore(newHand);
+
+          const updates = { [`gameState.hands.${uid}`]: newHand };
+          if (newScore > 7.5) {
+              playSound('bust');
+              updates[`gameState.status.${uid}`] = 'busted';
+          } else if (newScore === 7.5) {
+              playSound('win');
+              updates[`gameState.status.${uid}`] = 'stood';
+          }
+          updateRoom(updates);
+      };
+
+      const handleStand = (uid) => {
+          if (!isLocal && user.uid !== uid) return;
+          if (status[uid] !== 'playing') return;
+          updateRoom({ [`gameState.status.${uid}`]: 'stood' });
+      };
+
+      const renderCard = (c, i, isHidden = false) => {
+          if (isHidden) {
+              return (
+                  <div key={`hidden-${i}`} className="w-14 h-20 md:w-16 md:h-24 bg-indigo-900 rounded-lg shadow-[2px_2px_10px_rgba(0,0,0,0.5)] border-2 border-slate-300 flex items-center justify-center absolute animate-[spinCard_0.3s_ease-out]" style={{ left: `${i * 25}px`, zIndex: i }}>
+                      <div className="w-full h-full border-2 border-indigo-700/50 rounded flex items-center justify-center bg-indigo-800" style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(0,0,0,0.2) 5px, rgba(0,0,0,0.2) 10px)' }}>
+                          <i className="fa-solid fa-money-bill-wave text-indigo-400/30 text-2xl"></i>
+                      </div>
+                  </div>
+              );
+          }
+
+          let colorClass = 'text-slate-800';
+          if (c.suit === 'Cuori' || c.suit === 'Quadri' || c.suit === 'Coppe' || c.suit === 'Denari') colorClass = 'text-red-600';
+          let icon = 'fa-gem';
+          if(c.suit === 'Coppe') icon = 'fa-wine-glass';
+          if(c.suit === 'Spade') icon = 'fa-khanda';
+          if(c.suit === 'Bastoni') icon = 'fa-gavel';
+
+          return (
+              <div key={i} className={`w-14 h-20 md:w-16 md:h-24 bg-slate-100 rounded-lg shadow-[2px_2px_10px_rgba(0,0,0,0.5)] border border-slate-300 flex flex-col justify-between p-1.5 md:p-2 absolute animate-[spinCard_0.3s_ease-out]`} style={{ left: `${i * 25}px`, zIndex: i }}>
+                  <div className={`text-xs md:text-sm font-black leading-none ${colorClass}`}>{c.name}</div>
+                  <div className={`self-center text-lg md:text-2xl ${colorClass}`}><i className={`fa-solid ${icon}`}></i></div>
+                  <div className={`text-xs md:text-sm font-black leading-none text-right rotate-180 ${colorClass}`}>{c.name}</div>
+              </div>
+          )
+      };
+
+      const bankScore = getHandScore(bankHand);
+      const hideBankCards = phase === 'playing';
+
+      return (
+        <div className="flex flex-col h-full gap-4 select-none">
+          {/* HEADER */}
+          <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 shadow-md flex justify-between items-center">
+             <div>
+                <h2 className="text-xl font-bold text-amber-400"><i className="fa-solid fa-money-bill-wave mr-2"></i>Sette e Mezzo</h2>
+                <p className="text-xs text-slate-400">Round {minigameRound} di 10</p>
+             </div>
+             <div className="flex gap-2 text-xs font-bold text-slate-400">
+                <span className="bg-slate-900 px-2 py-1 rounded">Batti Banco: +1.5</span>
+                <span className="bg-slate-900 px-2 py-1 rounded">7.5: +2.0</span>
+                <span className="bg-slate-900 px-2 py-1 rounded text-red-400">Sballo: -0.5</span>
+             </div>
+          </div>
+
+          {/* TAVOLO VERDE */}
+          <div className="flex-1 bg-emerald-800 rounded-2xl border-8 border-slate-900 shadow-inner flex flex-col relative overflow-hidden" style={{ backgroundImage: 'radial-gradient(circle, #065f46 0%, #064e3b 100%)' }}>
+             
+             {/* BANCO */}
+             <div className="w-full py-4 border-b-2 border-emerald-900/50 bg-black/20 flex flex-col items-center justify-center min-h-[160px]">
+                 <h3 className="text-amber-400 font-black tracking-widest uppercase mb-2 drop-shadow-md">IL BANCO</h3>
+                 
+                 <div className="relative h-20 md:h-24 transition-all" style={{ width: `${56 + (bankHand.length - 1) * 25}px` }}>
+                     {bankHand.map((c, i) => renderCard(c, i, hideBankCards))}
+                     
+                     {phase === 'bank_turn' && (
+                        <div className="absolute -right-20 top-1/2 -translate-y-1/2 text-white font-bold animate-pulse text-sm bg-black/50 px-2 py-1 rounded">Pensando...</div>
+                     )}
+                 </div>
+                 
+                 {phase !== 'playing' && (
+                     <div className={`mt-4 px-3 py-1 rounded-full font-black text-sm shadow-md ${bankScore > 7.5 ? 'bg-red-500 text-white' : 'bg-emerald-100 text-emerald-900'}`}>
+                         {bankScore > 7.5 ? 'BANCO SBALLATO!' : `Valore: ${bankScore}`}
+                     </div>
+                 )}
+             </div>
+
+             {/* GIOCATORI */}
+             <div className="flex-1 p-4 overflow-y-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                 {turnOrder.map(uid => {
+                     const p = players[uid];
+                     const isMe = isLocal || user.uid === uid;
+                     const hideCards = !isLocal && !isMe && phase === 'playing'; // Logica copertura carte
+                     
+                     const hand = hands[uid] || [];
+                     const pStat = status[uid];
+                     const pScore = getHandScore(hand);
+                     const internalScore = scores[uid] || 0;
+                     
+                     let resultDelta = 0;
+                     if (phase === 'round_results') {
+                         if (pStat === 'busted') resultDelta = -0.5;
+                         else if (pScore === 7.5) resultDelta = 2.0;
+                         else if (bankScore > 7.5 || pScore > bankScore) resultDelta = 1.5;
+                     }
+
+                     return (
+                         <div key={uid} className={`bg-black/30 rounded-xl p-3 border-2 flex flex-col transition-all ${isMe ? 'border-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.2)]' : 'border-slate-800'}`}>
+                             
+                             <div className="flex justify-between items-center mb-3">
+                                 <div className="flex items-center gap-2">
+                                     <img src={CHARACTERS.find(c=>c.id===p.character)?.url} className="w-8 h-8 rounded-full border-2" style={{borderColor: p.color}} />
+                                     <span className="font-bold text-sm text-white">{p.nickname}</span>
+                                 </div>
+                                 <div className="text-amber-400 font-black bg-amber-900/30 px-2 py-1 rounded text-sm">{internalScore} pt</div>
+                             </div>
+
+                             <div className="flex-1 flex flex-col items-center justify-center relative min-h-[120px]">
+                                 <div className="relative h-20 md:h-24 transition-all" style={{ width: `${56 + (hand.length - 1) * 25}px` }}>
+                                     {hand.map((c, i) => renderCard(c, i, hideCards))}
+                                 </div>
+                                 
+                                 {/* Overlays / Status */}
+                                 {pStat === 'busted' && (
+                                     <div className="absolute inset-0 bg-red-900/80 rounded-lg flex items-center justify-center z-20 backdrop-blur-sm animate-[spinCard_0.3s_ease-out]">
+                                         <span className="text-white font-black text-2xl rotate-[-10deg] drop-shadow-md">SBALLATO!</span>
+                                     </div>
+                                 )}
+                                 {pStat === 'stood' && phase === 'playing' && (
+                                     <div className="absolute inset-0 bg-black/60 rounded-lg flex items-center justify-center z-20 backdrop-blur-sm">
+                                         <span className="text-white font-black text-2xl drop-shadow-md">STO</span>
+                                     </div>
+                                 )}
+                                 
+                                 {phase === 'round_results' && (
+                                     <div className={`absolute top-0 right-0 z-30 font-black text-3xl animate-bounce drop-shadow-[0_2px_5px_rgba(0,0,0,0.8)]
+                                         ${resultDelta > 0 ? 'text-emerald-400' : resultDelta < 0 ? 'text-red-400' : 'text-slate-400'}`}>
+                                         {resultDelta > 0 ? `+${resultDelta}` : resultDelta < 0 ? resultDelta : '0'}
+                                     </div>
+                                 )}
+                             </div>
+
+                             {/* Controlli o Riepilogo */}
+                             <div className="mt-3 flex gap-2">
+                                 {phase === 'playing' ? (
+                                     isMe && pStat === 'playing' ? (
+                                         <>
+                                             <button onClick={() => handleHit(uid)} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 rounded shadow-md active:scale-95 transition-all">CARTA</button>
+                                             <button onClick={() => handleStand(uid)} className="flex-1 bg-red-600 hover:bg-red-500 text-white font-bold py-2 rounded shadow-md active:scale-95 transition-all">STO ({pScore})</button>
+                                         </>
+                                     ) : (
+                                         <div className="w-full text-center text-slate-400 text-sm font-bold bg-black/40 py-2 rounded">
+                                             {pStat === 'playing' ? 'Decidendo...' : (hideCards ? 'Pronto!' : `Attende (Valore: ${pScore})`)}
+                                         </div>
+                                     )
+                                 ) : (
+                                     <div className={`w-full text-center font-black py-2 rounded text-sm
+                                         ${pStat === 'busted' ? 'bg-red-900/50 text-red-400' : pScore === 7.5 ? 'bg-yellow-500/20 text-yellow-400' : 'bg-black/40 text-white'}`}>
+                                         Valore Finale: {pScore}
+                                     </div>
+                                 )}
+                             </div>
+                         </div>
+                     );
+                 })}
+             </div>
+          </div>
+
+          {/* LEGENDA CARTE */}
+          <div className="bg-slate-800 p-3 md:p-4 rounded-xl border border-slate-700 shadow-md flex flex-col md:flex-row justify-center items-center gap-3 md:gap-6 text-xs md:text-sm text-slate-300">
+             <span className="font-bold text-amber-400 uppercase tracking-widest text-[10px] md:text-xs"><i className="fa-solid fa-circle-info mr-1"></i> Valore Carte:</span>
+             <div className="flex items-center gap-2">
+                 <span className="bg-slate-900 px-2 py-1 rounded text-white font-bold border border-slate-600">Da 1 a 7</span>
+                 <span>= Da 1 a 7 Punti</span>
+             </div>
+             <div className="hidden md:block w-px h-4 bg-slate-600"></div>
+             <div className="flex items-center gap-2">
+                 <span className="bg-slate-900 px-2 py-1 rounded text-white font-bold border border-slate-600">Fante, Cavallo, Re</span>
+                 <span>= Mezzo Punto (0.5)</span>
+             </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ==========================================
+    // MINIGIOCO: IL CASSAFORTIERE
+    // ==========================================
+    function CassafortiereGame({ user, roomData, roomId, updateRoom, isLocal }) {
+      const { gameState, players } = roomData;
+      const isHost = isLocal || roomData.hostId === user.uid;
+      const finishedPlayers = gameState.finishedPlayers || [];
+      const isGameOver = gameState.isGameOver;
+
+      // Stato locale per gli input correnti (per evitare lag con Firebase ad ogni singola cifra)
+      const [currentInputs, setCurrentInputs] = useState(() => {
+          const init = {};
+          gameState.turnOrder.forEach(uid => init[uid] = []);
+          return init;
+      });
+
+      const playSound = (type) => {
+        try {
+          const ctx = new (window.AudioContext || window.webkitAudioContext)();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          
+          if (type === 'type') {
+            osc.type = 'sine'; osc.frequency.setValueAtTime(800 + Math.random()*200, ctx.currentTime);
+            gain.gain.setValueAtTime(0.1, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.05);
+            osc.start(); osc.stop(ctx.currentTime + 0.05);
+          } else if (type === 'submit') {
+            osc.type = 'square'; osc.frequency.setValueAtTime(300, ctx.currentTime); osc.frequency.linearRampToValueAtTime(200, ctx.currentTime + 0.2);
+            gain.gain.setValueAtTime(0.1, ctx.currentTime); gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.2);
+            osc.start(); osc.stop(ctx.currentTime + 0.2);
+          } else if (type === 'unlock') {
+            osc.type = 'triangle'; osc.frequency.setValueAtTime(400, ctx.currentTime); osc.frequency.setValueAtTime(600, ctx.currentTime + 0.1); osc.frequency.setValueAtTime(800, ctx.currentTime + 0.2);
+            gain.gain.setValueAtTime(0.2, ctx.currentTime); gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.4);
+            osc.start(); osc.stop(ctx.currentTime + 0.4);
+          }
+        } catch (e) {}
+      };
+
+      // Failsafe Fine Partita
+      useEffect(() => {
+        if (isGameOver && roomData.status === 'playing' && isHost) {
+          const timeout = setTimeout(() => {
+            let finalFinished = [...finishedPlayers];
+            const lastPlayer = gameState.turnOrder.find(id => !finalFinished.includes(id));
+            if (lastPlayer && finalFinished.length < gameState.turnOrder.length) finalFinished.push(lastPlayer);
+            const results = finalFinished.map((id, index) => ({ id, position: index + 1 }));
+            const pointsUpdate = {};
+            results.forEach((res, index) => {
+              const pts = POINTS_SYSTEM[index] || 0; res.pointsEarned = pts;
+              pointsUpdate[`players.${res.id}.totalScore`] = players[res.id].totalScore + pts;
+            });
+            updateRoom({ status: 'round_results', 'gameState.results': results, ...pointsUpdate });
+          }, 2500); 
+          return () => clearTimeout(timeout);
+        }
+      }, [isGameOver, roomData.status, isHost, updateRoom, players, finishedPlayers, gameState.turnOrder]);
+
+      const handleNumpad = (uid, num) => {
+          if (!isLocal && user.uid !== uid) return;
+          if (finishedPlayers.includes(uid)) return;
+          
+          const safeIdx = gameState.currentSafe[uid] || 0;
+          const targetLength = gameState.secretCodes[uid][safeIdx].length;
+
+          setCurrentInputs(prev => {
+              const current = prev[uid] || [];
+              if (current.length < targetLength) {
+                  playSound('type');
+                  return { ...prev, [uid]: [...current, num.toString()] };
+              }
+              return prev;
+          });
+      };
+
+      const handleDel = (uid) => {
+          if (!isLocal && user.uid !== uid) return;
+          if (finishedPlayers.includes(uid)) return;
+          
+          setCurrentInputs(prev => {
+              const current = prev[uid] || [];
+              if (current.length > 0) {
+                  playSound('type');
+                  return { ...prev, [uid]: current.slice(0, -1) };
+              }
+              return prev;
+          });
+      };
+
+      const handleSubmit = (uid) => {
+          if (!isLocal && user.uid !== uid) return;
+          if (finishedPlayers.includes(uid)) return;
+          
+          const safeIdx = gameState.currentSafe[uid] || 0;
+          const targetLength = gameState.secretCodes[uid][safeIdx].length;
+
+          const guess = currentInputs[uid] || [];
+          if (guess.length !== targetLength) return;
+
+          playSound('submit');
+          const target = gameState.secretCodes[uid][safeIdx].split('');
+          const result = new Array(targetLength).fill('wrong');
+          const targetCopy = [...target];
+          const guessCopy = [...guess];
+
+          // Pass 1: Corretti (Verdi)
+          for (let i = 0; i < targetLength; i++) {
+              if (guessCopy[i] === targetCopy[i]) {
+                  result[i] = 'correct';
+                  targetCopy[i] = null;
+                  guessCopy[i] = null;
+              }
+          }
+
+          // Pass 2: Spostati (Gialli)
+          for (let i = 0; i < targetLength; i++) {
+              if (guessCopy[i] !== null) {
+                  const foundIdx = targetCopy.indexOf(guessCopy[i]);
+                  if (foundIdx !== -1) {
+                      result[i] = 'misplaced';
+                      targetCopy[foundIdx] = null;
+                  }
+              }
+          }
+
+          const historyItem = { guess, result };
+          const newHistory = [...(gameState.guessHistories[uid] || []), historyItem];
+          const updates = { [`gameState.guessHistories.${uid}`]: newHistory };
+
+          // Controllo Vittoria
+          if (result.every(r => r === 'correct')) {
+              playSound('unlock');
+              
+              if (safeIdx < 2) {
+                  // Passa alla cassaforte successiva
+                  updates[`gameState.currentSafe.${uid}`] = safeIdx + 1;
+                  updates[`gameState.guessHistories.${uid}`] = []; // Resetta la history
+              } else {
+                  // Ha aperto tutte e 3 le casseforti
+                  const newFinished = [...finishedPlayers, uid];
+                  updates[`gameState.finishedPlayers`] = newFinished;
+                  
+                  if (newFinished.length >= Math.max(1, gameState.turnOrder.length - 1)) {
+                      updates[`gameState.isGameOver`] = true;
+                  }
+              }
+          }
+
+          updateRoom(updates);
+          setCurrentInputs(prev => ({ ...prev, [uid]: [] }));
+      };
+
+      return (
+        <div className="flex flex-col h-full gap-4 select-none">
+          <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 shadow-md flex justify-between items-center">
+             <div>
+                <h2 className="text-xl font-bold text-sky-400"><i className="fa-solid fa-vault mr-2"></i>Il Cassafortiere</h2>
+                <p className="text-xs text-slate-400">Round {roomData.currentRound} di {roomData.config.rounds}</p>
+             </div>
+             <div className="flex gap-4 text-xs font-bold text-slate-400">
+                <span className="flex items-center gap-1"><div className="w-3 h-3 bg-emerald-500 rounded-sm"></div> Giusto</span>
+                <span className="flex items-center gap-1"><div className="w-3 h-3 bg-amber-500 rounded-sm"></div> Spostato</span>
+                <span className="flex items-center gap-1"><div className="w-3 h-3 bg-slate-600 rounded-sm"></div> Assente</span>
+             </div>
+          </div>
+
+          <div className="flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-slate-700">
+             {gameState.turnOrder.map(uid => {
+                 const p = players[uid];
+                 const isMe = isLocal || user.uid === uid;
+                 const history = gameState.guessHistories[uid] || [];
+                 const inputs = currentInputs[uid] || [];
+                 const hasFinished = finishedPlayers.includes(uid);
+                 const finishPos = finishedPlayers.indexOf(uid) + 1;
+                 const safeIdx = gameState.currentSafe[uid] || 0;
+                 const targetLength = hasFinished ? 8 : gameState.secretCodes[uid][safeIdx].length;
+
+                 return (
+                     <div key={uid} className={`bg-slate-800 rounded-2xl border-4 shadow-xl flex flex-col overflow-hidden transition-all ${isMe ? 'shadow-[0_0_15px_rgba(56,189,248,0.2)]' : 'opacity-90 scale-95'}`} style={{ borderColor: p.color }}>
+                         
+                         {/* Player Header */}
+                         <div className="bg-slate-900/50 p-2 flex items-center justify-between border-b border-slate-700">
+                             <div className="flex items-center gap-2">
+                                <img src={CHARACTERS.find(c=>c.id===p.character)?.url} className="w-8 h-8 rounded-full border-2" style={{ borderColor: p.color }} />
+                                <div className="font-bold text-sm text-white truncate">{p.nickname}</div>
+                             </div>
+                             <div className="flex items-center gap-2">
+                                <div className="text-xs font-black text-sky-400 bg-sky-900/30 border border-sky-700/50 px-2 py-1 rounded">
+                                   Cassa {Math.min(safeIdx + 1, 3)}/3
+                                </div>
+                                <div className="text-xs font-black text-slate-500 bg-slate-800 px-2 py-1 rounded border border-slate-600">
+                                   Tentativi: {history.length}
+                                </div>
+                             </div>
+                         </div>
+
+                         {/* Central Area: History & Display */}
+                         <div className="flex-1 p-3 flex flex-col relative bg-slate-900 min-h-[160px]">
+                             {/* History Log */}
+                             <div className="flex-1 overflow-y-auto flex flex-col gap-1 mb-2 scrollbar-none pr-1">
+                                 {history.map((h, i) => (
+                                     <div key={i} className="flex justify-center gap-1">
+                                         {h.result.map((res, rIdx) => {
+                                             const bg = res === 'correct' ? 'bg-emerald-500' : res === 'misplaced' ? 'bg-amber-500' : 'bg-slate-700';
+                                             return (
+                                                 <div key={rIdx} className={`w-5 h-7 md:w-6 md:h-8 rounded text-white flex items-center justify-center font-bold text-xs md:text-sm shadow-sm border border-black/20 ${bg}`}>
+                                                     {isMe || hasFinished ? h.guess[rIdx] : '*'}
+                                                 </div>
+                                             )
+                                         })}
+                                     </div>
+                                 ))}
+                             </div>
+
+                             {/* Current Input Display */}
+                             <div className="flex justify-center gap-1 p-2 bg-slate-800 rounded-xl border border-slate-700 shadow-inner min-h-[50px]">
+                                 {Array.from({length: targetLength}).map((_, idx) => (
+                                     <div key={idx} className={`w-6 h-8 md:w-8 md:h-10 rounded border-2 flex items-center justify-center font-black text-lg md:text-xl text-white transition-colors
+                                         ${inputs[idx] ? 'border-sky-400 bg-sky-900/50 shadow-[0_0_8px_rgba(56,189,248,0.5)]' : 'border-slate-600 bg-slate-900'}`}>
+                                         {inputs[idx] || ''}
+                                     </div>
+                                 ))}
+                             </div>
+
+                             {/* Overlays */}
+                             {hasFinished && (
+                                 <div className="absolute inset-0 bg-slate-900/90 backdrop-blur-sm flex flex-col items-center justify-center z-20">
+                                     <i className="fa-solid fa-lock-open text-5xl text-emerald-400 mb-2 drop-shadow-[0_0_15px_rgba(16,185,129,0.8)]"></i>
+                                     <div className="font-black text-white text-2xl tracking-widest">APERTA!</div>
+                                     <div className="bg-emerald-600 text-white font-bold px-3 py-1 rounded-full text-sm mt-2">{finishPos}° Classificato</div>
+                                 </div>
+                             )}
+                             {!isMe && !hasFinished && (
+                                 <div className="absolute inset-0 bg-transparent z-10"></div> // Previene interazioni da altri
+                             )}
+                         </div>
+
+                         {/* On-Screen Numpad */}
+                         <div className="p-2 bg-slate-800 border-t border-slate-700">
+                             <div className="grid grid-cols-3 gap-1 md:gap-2">
+                                 {[1,2,3,4,5,6,7,8,9].map(num => (
+                                     <button key={num} onClick={() => handleNumpad(uid, num)} disabled={!isMe || hasFinished}
+                                         className="bg-slate-700 hover:bg-slate-600 active:bg-slate-500 text-white font-bold py-2 md:py-3 rounded shadow disabled:opacity-50 transition-colors">
+                                         {num}
+                                     </button>
+                                 ))}
+                                 <button onClick={() => handleDel(uid)} disabled={!isMe || hasFinished} className="bg-red-900/80 hover:bg-red-800 text-red-200 font-bold py-2 rounded shadow disabled:opacity-50"><i className="fa-solid fa-delete-left"></i></button>
+                                 <button onClick={() => handleNumpad(uid, 0)} disabled={!isMe || hasFinished} className="bg-slate-700 hover:bg-slate-600 active:bg-slate-500 text-white font-bold py-2 rounded shadow disabled:opacity-50">0</button>
+                                 <button onClick={() => handleSubmit(uid)} disabled={!isMe || hasFinished || inputs.length < targetLength} className="bg-sky-600 hover:bg-sky-500 text-white font-bold py-2 rounded shadow disabled:opacity-50 disabled:bg-slate-700"><i className="fa-solid fa-check"></i></button>
+                             </div>
+                         </div>
+                     </div>
+                 )
+             })}
+          </div>
+        </div>
+      );
+    }
+
+    // ==========================================
+    // MINIGIOCO: INDOVINA IL NUMERO
     // MINIGIOCO: CARTA PIU ALTA
     // ==========================================
     function CartaAltaGame({ user, roomData, roomId, updateRoom, isLocal }) {
@@ -4264,7 +5271,7 @@
       const activePlayer = players[activePlayerId];
       
       const finishedPlayers = gameState.finishedPlayers || [];
-      const isGameOver = finishedPlayers.length >= gameState.turnOrder.length - 1 && gameState.turnOrder.length > 1;
+      const isGameOver = gameState.isGameOver || (finishedPlayers.length >= gameState.turnOrder.length - 1 && gameState.turnOrder.length > 1);
 
       const [displayDice, setDisplayDice] = useState([0, 0]);
       const [isAnimatingDice, setIsAnimatingDice] = useState(false);
@@ -4304,8 +5311,12 @@
       useEffect(() => {
         if (isGameOver && roomData.status === 'playing' && (isLocal || roomData.hostId === user.uid)) {
           let finalFinished = [...finishedPlayers];
-          const lastPlayer = gameState.turnOrder.find(id => !finalFinished.includes(id));
-          if (lastPlayer && finalFinished.length < gameState.turnOrder.length) finalFinished.push(lastPlayer);
+          
+          // Ordina chi non è ancora arrivato in base alla posizione sul tabellone (più alto = primo tra gli "sconfitti")
+          const remainingPlayers = gameState.turnOrder.filter(id => !finalFinished.includes(id));
+          remainingPlayers.sort((a, b) => gameState.boards[b] - gameState.boards[a]); 
+          finalFinished.push(...remainingPlayers);
+
           const results = finalFinished.map((id, index) => ({ id, position: index + 1 }));
           const pointsUpdate = {};
           results.forEach((res, index) => {
@@ -4314,17 +5325,20 @@
           });
           updateRoom({ status: 'round_results', 'gameState.results': results, ...pointsUpdate });
         }
-      }, [isGameOver, roomData.status, roomData.hostId, user.uid, isLocal, finishedPlayers]);
+      }, [isGameOver, roomData.status, roomData.hostId, user.uid, isLocal, finishedPlayers, gameState.turnOrder, gameState.boards, players, updateRoom]);
 
       const passTurnHelper = (state) => {
           let nextIdx = state.activePlayerIndex;
           let count = 0;
+          let wrapped = false;
           while(count < state.turnOrder.length) {
+              let prevIdx = nextIdx;
               nextIdx = (nextIdx + 1) % state.turnOrder.length;
+              if (nextIdx < prevIdx) wrapped = true; // Rileva il completamento di un giro
               if (!state.finishedPlayers.includes(state.turnOrder[nextIdx])) break;
               count++;
           }
-          return { nextIdx };
+          return { nextIdx, wrapped };
       };
 
       // Riproduci suono ad ogni passo del tabellone
@@ -4409,13 +5423,35 @@
 
       const resolveMovementEnd = (finalPos) => {
           let updates = {};
+          let tempState = { ...gameState };
+
           if (finalPos === 100) {
               const newFinished = [...finishedPlayers, activePlayerId];
               updates['gameState.finishedPlayers'] = newFinished;
-              const nextInfo = passTurnHelper({ ...gameState, finishedPlayers: newFinished });
+              tempState.finishedPlayers = newFinished;
+
+              // Avvia il countdown finale se è il primo ad arrivare
+              if (newFinished.length === 1 && tempState.closingRoundsLeft === null) {
+                  updates['gameState.closingRoundsLeft'] = 10;
+                  tempState.closingRoundsLeft = 10;
+              }
+          }
+
+          if (finalPos === 100 || (!LADDERS[finalPos] && !SNAKES[finalPos] && !gameState.boardSetup.stars.includes(finalPos) && !gameState.boardSetup.bins.includes(finalPos))) {
+              const nextInfo = passTurnHelper(tempState);
               updates['gameState.activePlayerIndex'] = nextInfo.nextIdx;
               updates['gameState.pendingAction'] = null;
               updates['gameState.hasRolled'] = false;
+
+              let roundsLeft = tempState.closingRoundsLeft;
+              if (roundsLeft !== null && nextInfo.wrapped) {
+                  roundsLeft--;
+                  updates['gameState.closingRoundsLeft'] = roundsLeft;
+              }
+
+              if (tempState.finishedPlayers.length >= gameState.turnOrder.length - 1 || roundsLeft === 0) {
+                  updates['gameState.isGameOver'] = true;
+              }
           } else if (LADDERS[finalPos]) {
               updates['gameState.pendingAction'] = 'ladder_jump';
               updates['gameState.targetCell'] = LADDERS[finalPos];
@@ -4445,20 +5481,35 @@
           if (!isMyTurn) return;
           const finalPos = gameState.targetCell;
           
+          let tempState = { ...gameState };
           let updates = { [`gameState.boards.${activePlayerId}`]: finalPos };
 
           if (finalPos === 100) {
               const newFinished = [...finishedPlayers, activePlayerId];
               updates['gameState.finishedPlayers'] = newFinished;
-              const nextInfo = passTurnHelper({ ...gameState, finishedPlayers: newFinished });
-              updates['gameState.activePlayerIndex'] = nextInfo.nextIdx;
-          } else {
-              const nextInfo = passTurnHelper(gameState);
-              updates['gameState.activePlayerIndex'] = nextInfo.nextIdx;
+              tempState.finishedPlayers = newFinished;
+              
+              if (newFinished.length === 1 && tempState.closingRoundsLeft === null) {
+                  updates['gameState.closingRoundsLeft'] = 10;
+                  tempState.closingRoundsLeft = 10;
+              }
           }
           
+          const nextInfo = passTurnHelper(tempState);
+          updates['gameState.activePlayerIndex'] = nextInfo.nextIdx;
           updates['gameState.pendingAction'] = null;
           updates['gameState.hasRolled'] = false;
+          
+          let roundsLeft = tempState.closingRoundsLeft;
+          if (roundsLeft !== null && nextInfo.wrapped) {
+              roundsLeft--;
+              updates['gameState.closingRoundsLeft'] = roundsLeft;
+          }
+
+          if (tempState.finishedPlayers.length >= gameState.turnOrder.length - 1 || roundsLeft === 0) {
+              updates['gameState.isGameOver'] = true;
+          }
+          
           updateRoom(updates);
       };
 
@@ -4485,7 +5536,14 @@
             <div className="flex items-center gap-3">
                <i className="fa-solid fa-staff-snake text-2xl text-emerald-500"></i>
                <div>
-                  <h2 className="text-xl font-bold text-white">Scale e Serpenti</h2>
+                  <div className="flex items-center gap-2">
+                     <h2 className="text-xl font-bold text-white">Scale e Serpenti</h2>
+                     {gameState.closingRoundsLeft !== null && !isGameOver && (
+                         <span className="bg-red-500/20 border border-red-500 text-red-400 px-2 py-0.5 rounded text-[10px] font-black uppercase animate-pulse">
+                             Ultimi {gameState.closingRoundsLeft} {gameState.closingRoundsLeft === 1 ? 'giro' : 'giri'}!
+                         </span>
+                     )}
+                  </div>
                   <p className="text-xs text-slate-400">Round {roomData.currentRound} di {roomData.config.rounds}</p>
                </div>
             </div>
