@@ -461,7 +461,15 @@
         const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
           setUser(currentUser);
           const savedNick = localStorage.getItem('partyGameNickname');
-          if (savedNick) setNickname(savedNick);
+          if (savedNick) {
+             setNickname(savedNick);
+             // Se abbiamo una stanza salvata, tenta la riconnessione automatica!
+             const savedRoomId = localStorage.getItem('partyGameRoomId');
+             if (savedRoomId) {
+                 setRoomId(savedRoomId);
+                 setView('loading'); // Schermata temporanea per evitare sfarfallii
+             }
+          }
         });
         return () => unsubscribe();
       }, []);
@@ -475,6 +483,8 @@
             const data = docSnap.data();
             setRoomData(data);
             
+            // Allineamento automatico della View in base allo stato della partita
+            if (data.status === 'lobby' && view !== 'lobby') setView('lobby');
             if (data.status === 'instructions' && view !== 'instructions') setView('instructions');
             if (data.status === 'playing' && view !== 'game') setView('game');
             if (data.status === 'round_results' && view !== 'results') setView('results');
@@ -483,6 +493,7 @@
             setErrorMsg("La stanza non esiste più.");
             setView('menu');
             setRoomId('');
+            localStorage.removeItem('partyGameRoomId'); // Pulisce in caso di stanza cancellata
           }
         }, (error) => {
           console.error("Errore ascolto stanza:", error);
@@ -555,6 +566,7 @@
           await setDoc(roomRef, initialData);
           setIsLocal(false);
           setRoomId(newRoomId);
+          localStorage.setItem('partyGameRoomId', newRoomId); // Salva in locale
           setView('lobby');
         } catch (err) {
           setErrorMsg("Errore nella creazione della stanza. Hai attivato Firestore Rules?");
@@ -578,6 +590,7 @@
           
           setIsLocal(false);
           setRoomId(joinId);
+          localStorage.setItem('partyGameRoomId', joinId); // Salva in locale
           setView('lobby');
           setErrorMsg('');
         } catch (err) {
@@ -613,6 +626,7 @@
         setRoomData(null);
         setIsLocal(false);
         setLocalRoomData(null);
+        localStorage.removeItem('partyGameRoomId'); // Rimuove il salvataggio volontariamente
       };
 
       const currentRoomData = isLocal ? localRoomData : roomData;
@@ -657,6 +671,7 @@
 
           <main className="max-w-6xl mx-auto p-4 md:p-6">
             {view === 'login' && <LoginView nickname={nickname} setNickname={setNickname} onSubmit={handleSetNickname} />}
+            {view === 'loading' && <div className="text-center text-slate-400 mt-20 animate-pulse"><i className="fa-solid fa-spinner fa-spin text-4xl mb-4 text-indigo-500 block"></i>Riconnessione alla partita in corso...</div>}
             {view === 'menu' && <MenuView onCreateClick={() => setView('create')} onJoinRoom={joinRoom} onLocalClick={() => setView('local_setup')} />}
             {view === 'create' && <CreateRoomView onBack={() => setView('menu')} onCreate={createRoom} />}
             {view === 'local_setup' && <LocalSetupView onBack={() => setView('menu')} onStart={startLocalGame} />}
