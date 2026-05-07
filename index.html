@@ -328,7 +328,7 @@
           gameId, turnOrder: activeOrder, activePlayerIndex: 0, 
           boards: initialBoards, direction: 1, skippedPlayers: [], 
           pendingAction: null, currentCard: null, targetCell: null, 
-          unoGuess: null, finishedPlayers: [] 
+          unoGuess: null, finishedPlayers: [], isSecondaryMove: false
         };
       }
 
@@ -2715,6 +2715,7 @@
               if (target > 45) target = 45;
               updates['gameState.targetCell'] = target;
               updates['gameState.pendingAction'] = 'click_to_move';
+              updates['gameState.isSecondaryMove'] = false;
           } else {
               if (card.value === 'stop') {
                   let target = currentPos + 1;
@@ -2726,6 +2727,7 @@
                   updates['gameState.targetCell'] = target;
                   updates['gameState.skippedPlayers'] = [...gameState.skippedPlayers, nextUidToSkip];
                   updates['gameState.pendingAction'] = 'click_to_move';
+                  updates['gameState.isSecondaryMove'] = false;
               } else if (card.value === 'reverse') {
                   const newDir = gameState.direction * -1;
                   const tempState = { ...gameState, direction: newDir };
@@ -2736,8 +2738,10 @@
                   updates['gameState.skippedPlayers'] = nextInfo.skips;
                   updates['gameState.pendingAction'] = null;
                   updates['gameState.currentCard'] = null;
+                  updates['gameState.isSecondaryMove'] = false;
               } else if (card.value === 'minus_two') {
                   updates['gameState.pendingAction'] = 'select_minus_two';
+                  updates['gameState.isSecondaryMove'] = false;
               }
           }
           updateRoom(updates);
@@ -2779,6 +2783,15 @@
               updates['gameState.skippedPlayers'] = nextInfo.skips;
               updates['gameState.pendingAction'] = null;
               updates['gameState.currentCard'] = null;
+              updates['gameState.isSecondaryMove'] = false;
+          } else if (gameState.isSecondaryMove) {
+              // Movimento causato da un bonus/malus. Ignoriamo la cella e passiamo il turno.
+              const nextInfo = passTurn(gameState);
+              updates['gameState.activePlayerIndex'] = nextInfo.nextIdx;
+              updates['gameState.skippedPlayers'] = nextInfo.skips;
+              updates['gameState.pendingAction'] = null;
+              updates['gameState.currentCard'] = null;
+              updates['gameState.isSecondaryMove'] = false;
           } else if ([5, 15, 25, 35].includes(finalPos)) {
               playSound('special');
               updates['gameState.pendingAction'] = 'plus_two_bonus';
@@ -2797,6 +2810,7 @@
               updates['gameState.skippedPlayers'] = nextInfo.skips;
               updates['gameState.pendingAction'] = null;
               updates['gameState.currentCard'] = null;
+              updates['gameState.isSecondaryMove'] = false;
           }
           updateRoom(updates);
       };
@@ -2806,14 +2820,14 @@
           if (!isMyTurn || gameState.pendingAction !== 'plus_two_bonus') return;
           let target = gameState.boards[activePlayerId] + 2;
           if (target > 45) target = 45;
-          updateRoom({ 'gameState.targetCell': target, 'gameState.pendingAction': 'click_to_move' });
+          updateRoom({ 'gameState.targetCell': target, 'gameState.pendingAction': 'click_to_move', 'gameState.isSecondaryMove': true });
       };
 
       const handleMinusTwoCell = () => {
           if (!isMyTurn || gameState.pendingAction !== 'minus_two_cell') return;
           let target = gameState.boards[activePlayerId] - 2;
           if (target < 0) target = 0;
-          updateRoom({ 'gameState.targetCell': target, 'gameState.pendingAction': 'click_to_move' });
+          updateRoom({ 'gameState.targetCell': target, 'gameState.pendingAction': 'click_to_move', 'gameState.isSecondaryMove': true });
       };
 
       const handleX2Bonus = () => {
@@ -2824,7 +2838,7 @@
           const card = { type: 'number', value: val * 2, color: colors[Math.floor(Math.random() * 4)] };
           let target = gameState.boards[activePlayerId] + card.value;
           if (target > 45) target = 45;
-          updateRoom({ 'gameState.currentCard': card, 'gameState.targetCell': target, 'gameState.pendingAction': 'click_to_move' });
+          updateRoom({ 'gameState.currentCard': card, 'gameState.targetCell': target, 'gameState.pendingAction': 'click_to_move', 'gameState.isSecondaryMove': false });
       };
 
       const handleMinusTwoSelect = (targetUid) => {
@@ -2867,7 +2881,8 @@
           updateRoom({
               'gameState.currentCard': drawnCard,
               'gameState.targetCell': target,
-              'gameState.pendingAction': 'click_to_move'
+              'gameState.pendingAction': 'click_to_move',
+              'gameState.isSecondaryMove': true
           });
       };
 
