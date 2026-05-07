@@ -559,7 +559,8 @@
               id: user.uid, nickname: nickname, character: null, color: '#3B82F6', totalScore: 0, isReady: false
             }
           },
-          gameState: null
+          gameState: null,
+          chat: [] 
         };
 
         try {
@@ -581,17 +582,35 @@
           const docSnap = await getDoc(roomRef);
           if (!docSnap.exists()) { setErrorMsg("Stanza non trovata."); return; }
           const data = docSnap.data();
-          if (data.status !== 'lobby') { setErrorMsg("Partita già iniziata."); return; }
-          if (Object.keys(data.players).length >= data.config.maxPlayers) { setErrorMsg("La stanza è piena."); return; }
+          
+          const isAlreadyInRoom = data.players && !!data.players[user.uid];
 
-          await updateDoc(roomRef, {
-            [`players.${user.uid}`]: { id: user.uid, nickname: nickname, character: null, color: '#10B981', totalScore: 0, isReady: false }
-          });
+          // Blocca solo se il gioco è iniziato E l'utente NON è già dentro
+          if (data.status !== 'lobby' && !isAlreadyInRoom) { 
+              setErrorMsg("Partita già iniziata."); 
+              return; 
+          }
+          // Blocca se la stanza è piena E l'utente NON è già dentro
+          if (!isAlreadyInRoom && Object.keys(data.players).length >= data.config.maxPlayers) { 
+              setErrorMsg("La stanza è piena."); 
+              return; 
+          }
+
+          // Aggiorna il database solo se è un giocatore nuovo
+          if (!isAlreadyInRoom) {
+              await updateDoc(roomRef, {
+                [`players.${user.uid}`]: { id: user.uid, nickname: nickname, character: null, color: '#10B981', totalScore: 0, isReady: false }
+              });
+          }
           
           setIsLocal(false);
           setRoomId(joinId);
           localStorage.setItem('partyGameRoomId', joinId); // Salva in locale
-          setView('lobby');
+          
+          // Se la partita è in lobby andiamo in lobby, altrimenti ci penserà l'useEffect a portarlo nel minigioco
+          if (data.status === 'lobby') {
+             setView('lobby');
+          }
           setErrorMsg('');
         } catch (err) {
           setErrorMsg("Errore nell'unirsi alla stanza.");
