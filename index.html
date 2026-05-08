@@ -794,13 +794,99 @@
                         if (phase === 'playing') {
                             doAction(() => {
                                 const val = gameState.hands[activeUid].value;
+                                const activePlayers = turnOrder.filter(uid => !(gameState.deadPlayers || []).includes(uid));
+                                const localActiveIdx = activePlayers.indexOf(activeUid);
+                                const starterLocalIdx = activePlayers.indexOf(turnOrder[gameState.roundStarterIndex]);
+                                const nextLocalIdx = (localActiveIdx + 1) % activePlayers.length;
+                                const isLastPlayerOfRound = nextLocalIdx === starterLocalIdx;
+
                                 if (val < 5) {
-                                    // Swap
-                                    let nextLocalIdx = (activePlayerIndex + 1) % turnOrder.length;
-                                    updateRoom({ 'gameState.actionLog': `${players[activeUid].nickname} scambia.`, 'gameState.activePlayerIndex': nextLocalIdx });
+                                    // LOGICA SWAP DEL BOT
+                                    let targetType = 'player';
+                                    let targetUid = null;
+                                    let blocked = false;
+
+                                    if (isLastPlayerOfRound) {
+                                        targetType = 'deck';
+                                    } else {
+                                        let checkIdx = nextLocalIdx;
+                                        while (checkIdx !== starterLocalIdx) {
+                                            const tUid = activePlayers[checkIdx];
+                                            const tCard = gameState.hands[tUid];
+                                            if (tCard.value === 10) {
+                                                blocked = true;
+                                                targetUid = tUid;
+                                                break;
+                                            } else if (tCard.value === 9) {
+                                                checkIdx = (checkIdx + 1) % activePlayers.length;
+                                            } else {
+                                                targetUid = tUid;
+                                                break;
+                                            }
+                                        }
+                                        if (checkIdx === starterLocalIdx && !blocked) {
+                                            targetType = 'deck';
+                                        }
+                                    }
+
+                                    let newHands = { ...gameState.hands };
+                                    let newRevealed = { ...gameState.revealed };
+                                    let newDeck = [...gameState.deck];
+                                    let logMsg = "";
+
+                                    if (blocked) {
+                                        logMsg = `${players[activeUid].nickname} prova a scambiare, ma è BLOCCATO dal Re di ${players[targetUid].nickname}!`;
+                                    } else if (targetType === 'deck') {
+                                        if (newDeck.length === 0) {
+                                            const suits = ['Denari', 'Coppe', 'Spade', 'Bastoni'];
+                                            suits.forEach(s => {
+                                                for(let v=1; v<=10; v++) newDeck.push({value: v, suit: s, id: Math.random().toString(36).substring(2,9)});
+                                            });
+                                            newDeck.sort(() => Math.random() - 0.5);
+                                        }
+                                        const drawnCard = newDeck.pop();
+                                        newHands[activeUid] = drawnCard;
+                                        newRevealed[activeUid] = drawnCard.value >= 9;
+                                        logMsg = `${players[activeUid].nickname} scambia la carta con il MAZZO.`;
+                                    } else {
+                                        const oldActive = newHands[activeUid];
+                                        const oldTarget = newHands[targetUid];
+                                        newHands[activeUid] = oldTarget;
+                                        newHands[targetUid] = oldActive;
+                                        newRevealed[activeUid] = newHands[activeUid].value >= 9;
+                                        newRevealed[targetUid] = newHands[targetUid].value >= 9;
+                                        logMsg = `${players[activeUid].nickname} scambia la carta con ${players[targetUid].nickname}.`;
+                                    }
+
+                                    let updates = {
+                                        'gameState.hands': newHands,
+                                        'gameState.revealed': newRevealed,
+                                        'gameState.deck': newDeck,
+                                        'gameState.actionLog': logMsg
+                                    };
+
+                                    if (isLastPlayerOfRound) {
+                                        updates['gameState.phase'] = 'revealing';
+                                        activePlayers.forEach(uid => newRevealed[uid] = true);
+                                    } else {
+                                        updates['gameState.activePlayerIndex'] = turnOrder.indexOf(activePlayers[nextLocalIdx]);
+                                    }
+                                    updateRoom(updates);
+
                                 } else {
-                                    let nextLocalIdx = (activePlayerIndex + 1) % turnOrder.length;
-                                    updateRoom({ 'gameState.actionLog': `${players[activeUid].nickname} sta.`, 'gameState.activePlayerIndex': nextLocalIdx });
+                                    // LOGICA STAND DEL BOT
+                                    let logMsg = `${players[activeUid].nickname} sta.`;
+                                    let updates = { 'gameState.actionLog': logMsg };
+
+                                    if (isLastPlayerOfRound) {
+                                        updates['gameState.phase'] = 'revealing';
+                                        let newRevealed = { ...gameState.revealed };
+                                        activePlayers.forEach(uid => newRevealed[uid] = true);
+                                        updates['gameState.revealed'] = newRevealed;
+                                    } else {
+                                        updates['gameState.activePlayerIndex'] = turnOrder.indexOf(activePlayers[nextLocalIdx]);
+                                    }
+                                    updateRoom(updates);
                                 }
                             });
                         }
@@ -2976,7 +3062,9 @@
 
           if (isLastPlayerOfRound) {
               updates['gameState.phase'] = 'revealing';
-              activePlayers.forEach(uid => updates[`gameState.revealed.${uid}`] = true);
+              let newRevealed = { ...revealed };
+              activePlayers.forEach(uid => newRevealed[uid] = true);
+              updates['gameState.revealed'] = newRevealed;
           } else {
               updates['gameState.activePlayerIndex'] = turnOrder.indexOf(activePlayers[nextLocalIdx]);
           }
@@ -3058,7 +3146,7 @@
 
           if (isLastPlayerOfRound) {
               updates['gameState.phase'] = 'revealing';
-              activePlayers.forEach(uid => updates[`gameState.revealed.${uid}`] = true); // Rivela tutte a fine round
+              activePlayers.forEach(uid => newRevealed[uid] = true); // Rivela tutte a fine round
           } else {
               updates['gameState.activePlayerIndex'] = turnOrder.indexOf(activePlayers[nextLocalIdx]);
           }
