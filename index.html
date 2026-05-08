@@ -141,8 +141,8 @@
       { id: 'collega_punti', name: 'Collega Punti', icon: 'fa-solid fa-square-share-nodes', description: 'A turno, lancia il dado per ottenere i movimenti e traccia le linee. Se chiudi una casella ottieni un punto e continui a giocare! Chiudi più zone degli altri per vincere.' },
       { id: 'tabellUNO', name: 'TabellUNO', icon: 'fa-solid fa-chess-board', description: 'Pesca carte per avanzare verso il traguardo. Fai attenzione agli stop, ai cambi di giro e prova a indovinare i colori se cadi sulle caselle UNO!' },
       { id: 'catena_parole', name: 'Catena di Parole', icon: 'fa-solid fa-link', description: 'Ognuno crea una catena segreta di 5 parole collegate logicamente. Dovrai indovinare a turno la catena del giocatore precedente! Sbagliando sbloccherai una lettera. Se indovini ma la parola "non c\'entrava", fai Obiezione per penalizzare il creatore!' },
-      { id: 'corsa_cavalli', name: 'Corsa Dei Cavalli', icon: 'fa-solid fa-horse-head', description: 'Scommetti su uno degli 8 cavalli. Ogni 4.5 secondi viene girata una carta dal mazzo di 80 carte e il cavallo di quel colore avanza di un passo. Tifa per il tuo destriero, vince il primo che arriva al traguardo!' },
-      { id: 'indovina_numero', name: 'Indovina il Numero', icon: 'fa-solid fa-question', description: 'Scegli un numero segreto da 1 a 999. A turno, ogni giocatore cerca di indovinare il numero del giocatore successivo, che risponderà se il numero corretto è Più Alto o Più Basso!' }
+      { id: 'indovina_numero', name: 'Indovina il Numero', icon: 'fa-solid fa-question', description: 'Scegli un numero segreto da 1 a 999. A turno, ogni giocatore cerca di indovinare il numero del giocatore successivo, che risponderà se il numero corretto è Più Alto o Più Basso!' },
+      { id: 'spara_123', name: '1... 2... 3... Spara!', icon: 'fa-solid fa-crosshairs', description: 'Pianifica le tue 3 mosse in segreto, più la direzione finale in cui vuoi sparare. Tutti i movimenti vengono eseguiti contemporaneamente! I laser colpiscono chi si trova sulla traiettoria togliendo 1 vita. L\'ultimo che sopravvive vince!' }
     ];
     const POINTS_SYSTEM = [10, 6, 4, 2];
 
@@ -424,6 +424,39 @@
             targetCell: null, specialAmount: 0,
             boardSetup: { stars, bins },
             closingRoundsLeft: null
+        };
+      }
+
+      if (gameId === 'spara_123') {
+        const initialPositions = {};
+        const initialFacing = {};
+        const initialLives = {};
+        
+        // Assegna gli angoli/bordi opposti in base all'indice del giocatore
+        const spawnPoints = [
+            { r: 0, c: 0 }, { r: 9, c: 9 }, 
+            { r: 0, c: 9 }, { r: 9, c: 0 }, 
+            { r: 4, c: 0 }, { r: 4, c: 9 }
+        ];
+        const startFacings = ['down', 'up', 'left', 'right', 'right', 'left'];
+
+        activeOrder.forEach((id, index) => {
+            initialPositions[id] = spawnPoints[index % 6];
+            initialFacing[id] = startFacings[index % 6];
+            initialLives[id] = 3; // 3 vite a testa
+        });
+
+        return {
+            gameId, turnOrder: activeOrder,
+            phase: 'programming', // fasi: programming, sim_0, sim_1, sim_2, sim_turn, sim_laser, cleanup
+            positions: initialPositions,
+            facing: initialFacing,
+            lives: initialLives,
+            moves: {}, 
+            laserBeams: [],
+            deadPlayers: [],
+            finishedPlayers: [],
+            isGameOver: false
         };
       }
 
@@ -1144,8 +1177,512 @@
       if (gameState.gameId === 'indovina_numero') {
         return <IndovinaNumeroGame user={isLocal ? user : originalUser} roomData={roomData} roomId={roomId} updateRoom={updateRoom} isLocal={isLocal} />;
       }
+      if (gameState.gameId === 'spara_123') {
+        return <Spara123Game user={isLocal ? user : originalUser} originalUser={originalUser} roomData={roomData} roomId={roomId} updateRoom={updateRoom} isLocal={isLocal} />;
+      }
       
       return <div>Minigioco sconosciuto</div>;
+    }
+
+    // ==========================================
+    // MINIGIOCO: 1... 2... 3... SPARA!
+    // ==========================================
+    function Spara123Game({ user, originalUser, roomData, roomId, updateRoom, isLocal }) {
+      const { gameState, players } = roomData;
+      const actualUser = isLocal ? originalUser : user;
+      const isHost = isLocal || roomData.hostId === actualUser.uid;
+      
+      const { phase, positions, facing, lives, moves, laserBeams, deadPlayers, turnOrder } = gameState;
+      
+      const activePlayers = turnOrder.filter(uid => !deadPlayers.includes(uid));
+      const isGameOver = activePlayers.length <= 1 && deadPlayers.length > 0;
+
+      // Gestione input locale per l'utente
+      const [localMoves, setLocalMoves] = useState([]); // Array di max 4 elementi (3 mov + 1 sparo)
+
+      const playSound = (type) => {
+        try {
+          const ctx = new (window.AudioContext || window.webkitAudioContext)();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          
+          if (type === 'step') {
+            osc.type = 'triangle'; osc.frequency.setValueAtTime(300, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(150, ctx.currentTime + 0.1);
+            gain.gain.setValueAtTime(0.1, ctx.currentTime); gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.1);
+            osc.start(); osc.stop(ctx.currentTime + 0.1);
+          } else if (type === 'laser') {
+            osc.type = 'sawtooth'; osc.frequency.setValueAtTime(800, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.3);
+            gain.gain.setValueAtTime(0.2, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+            osc.start(); osc.stop(ctx.currentTime + 0.3);
+          } else if (type === 'hit') {
+            osc.type = 'square'; osc.frequency.setValueAtTime(150, ctx.currentTime);
+            osc.frequency.setValueAtTime(100, ctx.currentTime + 0.1);
+            osc.frequency.setValueAtTime(50, ctx.currentTime + 0.2);
+            gain.gain.setValueAtTime(0.3, ctx.currentTime); gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.4);
+            osc.start(); osc.stop(ctx.currentTime + 0.4);
+          }
+        } catch (e) {}
+      };
+
+      // Failsafe Fine Partita
+      useEffect(() => {
+        if (isGameOver && roomData.status === 'playing' && isHost) {
+          const to = setTimeout(() => {
+            let finalFinished = [...gameState.finishedPlayers];
+            if (activePlayers.length === 1) {
+                finalFinished.push(activePlayers[0]); // Il vincitore si aggiunge alla fine (quindi prende la 1° pos invertendo)
+            }
+            // I morti sono già in finishedPlayers nel momento in cui muoiono
+            const results = finalFinished.reverse().map((id, index) => ({ id, position: index + 1 }));
+            const pointsUpdate = {};
+            results.forEach((res, index) => {
+              const pts = POINTS_SYSTEM[index] || 0; res.pointsEarned = pts;
+              pointsUpdate[`players.${res.id}.totalScore`] = players[res.id].totalScore + pts;
+            });
+            updateRoom({ status: 'round_results', 'gameState.results': results, ...pointsUpdate });
+          }, 3000);
+          return () => clearTimeout(to);
+        }
+      }, [isGameOver, roomData.status, isHost]);
+
+      // MACCHINA A STATI DELL'HOST (Simulazione Simulata)
+      useEffect(() => {
+          if (!isHost || isGameOver) return;
+
+          if (phase === 'programming') {
+              const allReady = activePlayers.every(uid => moves[uid] && moves[uid].length === 4);
+              if (allReady && activePlayers.length > 0) {
+                  updateRoom({ 'gameState.phase': 'sim_0' });
+              }
+          } 
+          else if (phase.startsWith('sim_') && phase !== 'sim_turn' && phase !== 'sim_laser') {
+              // Gestione Movimenti (sim_0, sim_1, sim_2)
+              const stepIdx = parseInt(phase.split('_')[1]);
+              const to = setTimeout(() => {
+                  playSound('step');
+                  let newPos = { ...positions };
+                  
+                  activePlayers.forEach(uid => {
+                      const move = moves[uid][stepIdx];
+                      let {r, c} = newPos[uid];
+                      if (move === 'up') r = Math.max(0, r - 1);
+                      if (move === 'down') r = Math.min(9, r + 1);
+                      if (move === 'left') c = Math.max(0, c - 1);
+                      if (move === 'right') c = Math.min(9, c + 1);
+                      newPos[uid] = {r, c};
+                  });
+
+                  let nextPhase = `sim_${stepIdx + 1}`;
+                  if (stepIdx === 2) nextPhase = 'sim_turn';
+
+                  updateRoom({
+                      'gameState.positions': newPos,
+                      'gameState.phase': nextPhase
+                  });
+              }, 800);
+              return () => clearTimeout(to);
+          }
+          else if (phase === 'sim_turn') {
+              // Gestione Cambio Direzione
+              const to = setTimeout(() => {
+                  let newFacing = { ...facing };
+                  activePlayers.forEach(uid => {
+                      newFacing[uid] = moves[uid][3]; // La mossa finale è lo sparo
+                  });
+                  updateRoom({
+                      'gameState.facing': newFacing,
+                      'gameState.phase': 'sim_laser'
+                  });
+              }, 800);
+              return () => clearTimeout(to);
+          }
+          else if (phase === 'sim_laser') {
+              // Calcolo Traiettorie Laser e Danni
+              const to = setTimeout(() => {
+                  playSound('laser');
+                  let newBeams = [];
+                  let damage = {};
+
+                  activePlayers.forEach(shooter => {
+                      const {r, c} = positions[shooter];
+                      const dir = facing[shooter];
+                      let dr = 0, dc = 0;
+                      if (dir.includes('up')) dr = -1;
+                      if (dir.includes('down')) dr = 1;
+                      if (dir.includes('left')) dc = -1;
+                      if (dir.includes('right')) dc = 1;
+                      
+                      let currR = r + dr;
+                      let currC = c + dc;
+                      
+                      while (currR >= 0 && currR < 10 && currC >= 0 && currC < 10) {
+                          newBeams.push({ r: currR, c: currC, color: players[shooter].color, dir });
+                          
+                          // Check hit
+                          activePlayers.forEach(target => {
+                              if (target !== shooter && positions[target].r === currR && positions[target].c === currC) {
+                                  damage[target] = (damage[target] || 0) + 1;
+                              }
+                          });
+                          
+                          currR += dr;
+                          currC += dc;
+                      }
+                  });
+
+                  if (Object.keys(damage).length > 0) setTimeout(() => playSound('hit'), 200);
+
+                  let newLives = { ...lives };
+                  let newDead = [...deadPlayers];
+                  let newFinished = [...gameState.finishedPlayers];
+
+                  Object.entries(damage).forEach(([uid, dmg]) => {
+                      newLives[uid] -= dmg;
+                      if (newLives[uid] <= 0 && !newDead.includes(uid)) {
+                          newDead.push(uid);
+                          newFinished.push(uid); // Ordine inverso: il primo che muore va per primo in array
+                      }
+                  });
+
+                  updateRoom({
+                      'gameState.laserBeams': newBeams,
+                      'gameState.hitsThisRound': damage,
+                      'gameState.lives': newLives,
+                      'gameState.deadPlayers': newDead,
+                      'gameState.finishedPlayers': newFinished,
+                      'gameState.phase': 'cleanup'
+                  });
+              }, 1000);
+              return () => clearTimeout(to);
+          }
+          else if (phase === 'cleanup') {
+              // Ripulisci la plancia e prepara il turno successivo
+              const to = setTimeout(() => {
+                  updateRoom({
+                      'gameState.phase': 'programming',
+                      'gameState.moves': {},
+                      'gameState.laserBeams': [],
+                      'gameState.hitsThisRound': {}
+                  });
+              }, 3000); // 3 secondi per vedere i laser e chi è morto
+              return () => clearTimeout(to);
+          }
+
+      }, [isHost, phase, moves, activePlayers, isGameOver]);
+
+      const handleInput = (action) => {
+          if (localMoves.length < 4) {
+              setLocalMoves([...localMoves, action]);
+          }
+      };
+
+      const undoMove = () => {
+          if (localMoves.length > 0) {
+              setLocalMoves(localMoves.slice(0, -1));
+          }
+      };
+
+      const submitMoves = () => {
+          if (localMoves.length === 4) {
+              updateRoom({ [`gameState.moves.${user.uid}`]: localMoves });
+              setLocalMoves([]); // Reset locale
+          }
+      };
+
+      // --- NUOVA LOGICA: Calcola posizione simulata per disabilitare bottoni ---
+      let btnSimR = positions[user.uid]?.r ?? 0;
+      let btnSimC = positions[user.uid]?.c ?? 0;
+      
+      localMoves.forEach((move, idx) => {
+          if (idx < 3) { // Calcola solo i movimenti (primi 3 slot)
+              if (move === 'up') btnSimR = Math.max(0, btnSimR - 1);
+              if (move === 'down') btnSimR = Math.min(9, btnSimR + 1);
+              if (move === 'left') btnSimC = Math.max(0, btnSimC - 1);
+              if (move === 'right') btnSimC = Math.min(9, btnSimC + 1);
+          }
+      });
+
+      const isMovementPhase = localMoves.length < 3;
+      const disableUp = localMoves.length >= 4 || (isMovementPhase && btnSimR <= 0);
+      const disableDown = localMoves.length >= 4 || (isMovementPhase && btnSimR >= 9);
+      const disableLeft = localMoves.length >= 4 || (isMovementPhase && btnSimC <= 0);
+      const disableRight = localMoves.length >= 4 || (isMovementPhase && btnSimC >= 9);
+      const disableWait = localMoves.length >= 4 || localMoves.length === 3;
+      const disableDiagonals = localMoves.length >= 4 || isMovementPhase;
+      
+      // Calcolo Fantasmi (Anteprima Percorso)
+      let ghostR = positions[user.uid]?.r ?? 0;
+      let ghostC = positions[user.uid]?.c ?? 0;
+      const ghostPositions = [];
+      let finalFacingGhost = null;
+      
+      const currentMovesToRender = moves[user.uid] || localMoves;
+
+      currentMovesToRender.forEach((move, idx) => {
+          if (idx < 3) {
+              if (move === 'up') ghostR = Math.max(0, ghostR - 1);
+              if (move === 'down') ghostR = Math.min(9, ghostR + 1);
+              if (move === 'left') ghostC = Math.max(0, ghostC - 1);
+              if (move === 'right') ghostC = Math.min(9, ghostC + 1);
+              ghostPositions.push({ r: ghostR, c: ghostC, step: idx + 1 });
+          } else if (idx === 3) {
+              finalFacingGhost = move;
+          }
+      });
+      // -------------------------------------------------------------------------
+
+      // Helper per icone movimenti
+      const getActionIcon = (action, isShoot = false) => {
+          if (action === 'wait') return <i className="fa-solid fa-circle-dot"></i>;
+          const map = { 
+              up: { icon: 'fa-arrow-up', rot: 0 }, 
+              down: { icon: 'fa-arrow-down', rot: 0 }, 
+              left: { icon: 'fa-arrow-left', rot: 0 }, 
+              right: { icon: 'fa-arrow-right', rot: 0 },
+              'up-left': { icon: 'fa-arrow-up', rot: -45 },
+              'up-right': { icon: 'fa-arrow-up', rot: 45 },
+              'down-left': { icon: 'fa-arrow-down', rot: 45 },
+              'down-right': { icon: 'fa-arrow-down', rot: -45 }
+          };
+          const info = map[action];
+          return <i className={`fa-solid ${info.icon} ${isShoot ? 'text-red-500' : ''}`} style={{transform: `rotate(${info.rot}deg)`}}></i>;
+      };
+
+      const myStatus = deadPlayers.includes(user.uid) ? 'dead' : moves[user.uid] ? 'ready' : 'programming';
+
+      return (
+        <div className="flex flex-col h-full gap-4 select-none">
+          {/* HEADER */}
+          <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 shadow-md flex justify-between items-center">
+            <div>
+               <h2 className="text-xl font-bold text-red-500"><i className="fa-solid fa-crosshairs mr-2"></i>1... 2... 3... Spara!</h2>
+               <p className="text-xs text-slate-400">Pianifica le tue mosse per sopravvivere.</p>
+            </div>
+            
+            <div className="flex gap-3 overflow-x-auto max-w-full pb-2 md:pb-0">
+               {gameState.turnOrder.map(uid => {
+                   const isDead = deadPlayers.includes(uid);
+                   const isReady = moves[uid] && moves[uid].length === 4;
+                   
+                   return (
+                       <div key={uid} className={`bg-slate-900 px-3 py-1 rounded-lg border-2 flex items-center gap-2 min-w-max relative transition-all ${isDead ? 'opacity-40 grayscale scale-95' : isReady ? 'border-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.3)]' : 'border-slate-700'}`} style={!isDead && !isReady ? {borderColor: players[uid].color} : {}}>
+                          <img src={CHARACTERS.find(c=>c.id===players[uid].character)?.url} className="w-6 h-6 rounded-full" />
+                          <div className="flex flex-col">
+                             <span className={`text-[10px] font-bold ${isDead ? 'line-through' : ''}`}>{players[uid].nickname}</span>
+                             <div className="flex gap-0.5">
+                                 {[1,2,3].map(l => (
+                                     <i key={l} className={`fa-solid fa-heart text-[8px] ${l <= lives[uid] ? 'text-red-500' : 'text-slate-700'}`}></i>
+                                 ))}
+                             </div>
+                          </div>
+                          {isReady && !isDead && phase === 'programming' && <i className="fa-solid fa-check absolute -top-2 -right-2 text-white bg-emerald-500 rounded-full p-1 text-[8px]"></i>}
+                          {isDead && <i className="fa-solid fa-skull absolute -top-2 -right-2 text-white bg-slate-700 rounded-full p-1 text-[8px]"></i>}
+                       </div>
+                   )
+               })}
+            </div>
+          </div>
+
+          <div className="flex flex-col lg:flex-row gap-6 flex-1">
+             
+             {/* CONSOLE DI COMANDO */}
+             <div className="lg:w-1/3 bg-slate-800 p-4 md:p-6 rounded-xl border border-slate-700 shadow-lg flex flex-col justify-between min-h-[300px]">
+                 
+                 {myStatus === 'dead' ? (
+                     <div className="flex flex-col items-center justify-center h-full text-center">
+                         <i className="fa-solid fa-skull text-6xl text-slate-600 mb-4"></i>
+                         <h3 className="text-2xl font-black text-slate-400">SEI MORTO</h3>
+                         <p className="text-slate-500 mt-2">Goditi lo spettacolo e fai il tifo.</p>
+                     </div>
+                 ) : myStatus === 'ready' ? (
+                     <div className="flex flex-col items-center justify-center h-full text-center">
+                         <div className="w-24 h-24 bg-emerald-500/20 border-4 border-emerald-500 rounded-full flex items-center justify-center mb-4">
+                            <i className="fa-solid fa-check text-5xl text-emerald-400"></i>
+                         </div>
+                         <h3 className="text-2xl font-black text-emerald-400">MOSSE CONFERMATE</h3>
+                         <p className="text-slate-400 mt-2 animate-pulse">In attesa degli altri giocatori...</p>
+                     </div>
+                 ) : phase !== 'programming' ? (
+                     <div className="flex flex-col items-center justify-center h-full text-center">
+                         <i className="fa-solid fa-satellite-dish text-6xl text-indigo-400 mb-4 animate-pulse"></i>
+                         <h3 className="text-2xl font-black text-indigo-400 uppercase tracking-widest">Azione!</h3>
+                         <p className="text-slate-400 mt-2">Guarda l'arena per vedere i risultati.</p>
+                     </div>
+                 ) : (
+                     <div className="flex flex-col h-full w-full">
+                         <h3 className="text-xl font-bold text-center text-white mb-4">Programma le Mosse</h3>
+                         
+                         {/* Display Slot */}
+                         <div className="flex justify-center gap-2 mb-6">
+                             {[0, 1, 2, 3].map(i => {
+                                 const isShoot = i === 3;
+                                 const move = localMoves[i];
+                                 return (
+                                     <div key={i} className={`w-12 h-14 md:w-14 md:h-16 rounded-lg flex items-center justify-center text-2xl border-2 transition-all shadow-inner
+                                         ${move ? (isShoot ? 'bg-red-900/50 border-red-500 text-red-400 shadow-[0_0_10px_rgba(239,68,68,0.3)]' : 'bg-indigo-900/50 border-indigo-400 text-indigo-300') : 
+                                         'bg-slate-900 border-slate-600 text-slate-700'} 
+                                         ${localMoves.length === i ? 'ring-2 ring-white animate-pulse' : ''}
+                                     `}>
+                                         {move ? getActionIcon(move, isShoot) : isShoot ? <i className="fa-solid fa-crosshairs text-sm opacity-30"></i> : (i+1)}
+                                     </div>
+                                 )
+                             })}
+                         </div>
+
+                         {/* D-PAD Input */}
+                         <div className="flex-1 flex flex-col items-center justify-center">
+                             <div className="grid grid-cols-3 gap-1 md:gap-2 w-48">
+                                 <button onClick={()=>handleInput('up-left')} disabled={disableDiagonals} className="bg-slate-700 hover:bg-slate-600 active:bg-slate-500 disabled:opacity-30 p-3 md:p-4 rounded-lg shadow border-b-4 border-slate-800 active:border-b-0 text-xl flex items-center justify-center"><i className="fa-solid fa-arrow-up" style={{transform: 'rotate(-45deg)'}}></i></button>
+                                 <button onClick={()=>handleInput('up')} disabled={disableUp} className="bg-slate-700 hover:bg-slate-600 active:bg-slate-500 disabled:opacity-30 p-3 md:p-4 rounded-lg shadow border-b-4 border-slate-800 active:border-b-0 text-xl flex items-center justify-center"><i className="fa-solid fa-arrow-up"></i></button>
+                                 <button onClick={()=>handleInput('up-right')} disabled={disableDiagonals} className="bg-slate-700 hover:bg-slate-600 active:bg-slate-500 disabled:opacity-30 p-3 md:p-4 rounded-lg shadow border-b-4 border-slate-800 active:border-b-0 text-xl flex items-center justify-center"><i className="fa-solid fa-arrow-up" style={{transform: 'rotate(45deg)'}}></i></button>
+                                 
+                                 <button onClick={()=>handleInput('left')} disabled={disableLeft} className="bg-slate-700 hover:bg-slate-600 active:bg-slate-500 disabled:opacity-30 p-3 md:p-4 rounded-lg shadow border-b-4 border-slate-800 active:border-b-0 text-xl flex items-center justify-center"><i className="fa-solid fa-arrow-left"></i></button>
+                                 <button onClick={()=>handleInput('wait')} disabled={disableWait} className="bg-slate-800 border-2 border-slate-600 hover:bg-slate-700 active:bg-slate-600 disabled:opacity-30 p-3 md:p-4 rounded-lg text-xl flex items-center justify-center" title={localMoves.length === 3 ? "Non puoi sparare 'fermo'" : "Resta Fermo"}><i className="fa-solid fa-circle-dot"></i></button>
+                                 <button onClick={()=>handleInput('right')} disabled={disableRight} className="bg-slate-700 hover:bg-slate-600 active:bg-slate-500 disabled:opacity-30 p-3 md:p-4 rounded-lg shadow border-b-4 border-slate-800 active:border-b-0 text-xl flex items-center justify-center"><i className="fa-solid fa-arrow-right"></i></button>
+                                 
+                                 <button onClick={()=>handleInput('down-left')} disabled={disableDiagonals} className="bg-slate-700 hover:bg-slate-600 active:bg-slate-500 disabled:opacity-30 p-3 md:p-4 rounded-lg shadow border-b-4 border-slate-800 active:border-b-0 text-xl flex items-center justify-center"><i className="fa-solid fa-arrow-down" style={{transform: 'rotate(45deg)'}}></i></button>
+                                 <button onClick={()=>handleInput('down')} disabled={disableDown} className="bg-slate-700 hover:bg-slate-600 active:bg-slate-500 disabled:opacity-30 p-3 md:p-4 rounded-lg shadow border-b-4 border-slate-800 active:border-b-0 text-xl flex items-center justify-center"><i className="fa-solid fa-arrow-down"></i></button>
+                                 <button onClick={()=>handleInput('down-right')} disabled={disableDiagonals} className="bg-slate-700 hover:bg-slate-600 active:bg-slate-500 disabled:opacity-30 p-3 md:p-4 rounded-lg shadow border-b-4 border-slate-800 active:border-b-0 text-xl flex items-center justify-center"><i className="fa-solid fa-arrow-down" style={{transform: 'rotate(-45deg)'}}></i></button>
+                             </div>
+                         </div>
+
+                         <div className="flex gap-2 mt-6">
+                             <button onClick={undoMove} disabled={localMoves.length===0} className="flex-1 bg-red-900/50 hover:bg-red-800/50 disabled:opacity-50 text-red-300 py-3 rounded-lg font-bold"><i className="fa-solid fa-delete-left"></i> Cancella</button>
+                             <button onClick={submitMoves} disabled={localMoves.length<4} className="flex-[2] bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white shadow-lg py-3 rounded-lg font-black transition-colors"><i className="fa-solid fa-satellite-dish mr-2"></i> TRASMETTI</button>
+                         </div>
+                     </div>
+                 )}
+             </div>
+
+             {/* GRIGLIA DELL'ARENA (10x10) */}
+             <div className="lg:w-2/3 bg-slate-900 p-2 md:p-6 rounded-xl border-4 flex items-center justify-center shadow-2xl relative overflow-hidden" style={{ borderColor: myStatus === 'dead' ? '#475569' : players[user.uid]?.color || '#334155' }}>
+                
+                {/* Background Decorativo Arena */}
+                <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'linear-gradient(#38bdf8 1px, transparent 1px), linear-gradient(90deg, #38bdf8 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
+
+                <div className="grid grid-cols-10 grid-rows-10 gap-px md:gap-1 w-full max-w-[500px] aspect-square relative z-10 bg-slate-800 p-1 border-2 border-slate-600 shadow-[0_0_30px_rgba(0,0,0,0.8)]">
+                    
+                    {/* Generazione Celle vuote */}
+                    {Array.from({ length: 100 }).map((_, i) => (
+                        <div key={`cell-${i}`} className="bg-slate-900 w-full h-full rounded-sm"></div>
+                    ))}
+
+                    {/* Rendering Fantasmi (Anteprima Movimenti) */}
+                    {phase === 'programming' && myStatus !== 'dead' && ghostPositions.map((ghost, idx) => {
+                        const {r, c, step} = ghost;
+                        const pColor = players[user.uid].color;
+                        
+                        const isLastGhost = idx === ghostPositions.length - 1;
+                        let rotation = 0;
+                        if (isLastGhost && finalFacingGhost) {
+                            if (finalFacingGhost === 'right') rotation = 90;
+                            if (finalFacingGhost === 'down') rotation = 180;
+                            if (finalFacingGhost === 'left') rotation = -90;
+                            if (finalFacingGhost === 'up-right') rotation = 45;
+                            if (finalFacingGhost === 'down-right') rotation = 135;
+                            if (finalFacingGhost === 'down-left') rotation = 225;
+                            if (finalFacingGhost === 'up-left') rotation = -45;
+                        }
+
+                        return (
+                            <div key={`ghost-${idx}`} 
+                                 className="absolute transition-all duration-200 flex items-center justify-center z-20 pointer-events-none"
+                                 style={{ 
+                                     width: '10%', height: '10%', 
+                                     left: `${c * 10}%`, top: `${r * 10}%`,
+                                     opacity: 0.3 + (idx * 0.2)
+                                 }}>
+                                 <div className="relative flex items-center justify-center w-full h-full" style={{ transform: `rotate(${rotation}deg)` }}>
+                                     {isLastGhost && finalFacingGhost && (
+                                         <div className="absolute -top-[10px] w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-b-[8px]" style={{ borderBottomColor: 'rgba(239, 68, 68, 0.8)' }}></div>
+                                     )}
+                                     <img src={CHARACTERS.find(ch=>ch.id===players[user.uid].character)?.url} className="w-[70%] h-[70%] rounded-full border-2 border-dashed grayscale" style={{ borderColor: pColor }} />
+                                     <span className="absolute -bottom-1 -right-1 bg-slate-800 text-white text-[8px] font-bold px-1 rounded-full border border-slate-600" style={{ transform: `rotate(${-rotation}deg)` }}>{step}</span>
+                                 </div>
+                            </div>
+                        )
+                    })}
+
+                    {/* Rendering Giocatori */}
+                    {activePlayers.map(uid => {
+                        const {r, c} = positions[uid];
+                        const face = facing[uid];
+                        const pColor = players[uid].color;
+                        const isHit = gameState.hitsThisRound && gameState.hitsThisRound[uid] > 0;
+                        
+                        let rotation = 0;
+                        if (face === 'right') rotation = 90;
+                        if (face === 'down') rotation = 180;
+                        if (face === 'left') rotation = -90;
+                        if (face === 'up-right') rotation = 45;
+                        if (face === 'down-right') rotation = 135;
+                        if (face === 'down-left') rotation = 225;
+                        if (face === 'up-left') rotation = -45;
+
+                        return (
+                            <div key={`p-${uid}`} 
+                                 className="absolute transition-all duration-300 flex items-center justify-center z-30"
+                                 style={{ 
+                                     width: '10%', height: '10%', 
+                                     left: `${c * 10}%`, top: `${r * 10}%` 
+                                 }}>
+                                 <div className={`relative flex items-center justify-center transition-transform duration-300 w-full h-full ${isHit ? 'animate-bounce' : ''}`} style={{ transform: `rotate(${rotation}deg)` }}>
+                                     {/* Triangolo direzionale visivo sotto l'avatar */}
+                                     <div className="absolute -top-1 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-b-[8px]" style={{ borderBottomColor: pColor }}></div>
+                                     <img src={CHARACTERS.find(ch=>ch.id===players[uid].character)?.url} className={`w-[80%] h-[80%] rounded-full border-2 shadow-[0_0_8px_rgba(0,0,0,0.8)]`} style={{ borderColor: pColor, backgroundColor: pColor }} />
+                                     
+                                     {isHit && (
+                                         <div className="absolute inset-0 flex items-center justify-center z-40">
+                                            <i className="fa-solid fa-burst text-yellow-400 text-3xl drop-shadow-md"></i>
+                                         </div>
+                                     )}
+                                 </div>
+                            </div>
+                        )
+                    })}
+
+                    {/* Rendering Raggi Laser */}
+                    {phase === 'sim_laser' && laserBeams.map((beam, idx) => {
+                        const {r, c, color, dir} = beam;
+                        
+                        let width = '4px';
+                        let height = '4px';
+                        let transformStr = '';
+                        
+                        if (dir === 'up' || dir === 'down') { height = '100%'; }
+                        else if (dir === 'left' || dir === 'right') { width = '100%'; }
+                        else { 
+                            width = '141.4%';
+                            if (dir === 'up-left' || dir === 'down-right') transformStr = 'rotate(45deg)';
+                            if (dir === 'up-right' || dir === 'down-left') transformStr = 'rotate(-45deg)';
+                        }
+                        
+                        return (
+                            <div key={`beam-${idx}`} 
+                                 className="absolute flex items-center justify-center z-20 pointer-events-none"
+                                 style={{ width: '10%', height: '10%', left: `${c * 10}%`, top: `${r * 10}%` }}>
+                                 <div className={`bg-white shadow-[0_0_15px_rgba(255,255,255,1)] animate-pulse`} 
+                                      style={{ 
+                                          width: width, 
+                                          height: height,
+                                          transform: transformStr,
+                                          backgroundColor: color,
+                                          boxShadow: `0 0 10px ${color}, 0 0 20px ${color}`
+                                      }}>
+                                 </div>
+                            </div>
+                        );
+                    })}
+
+                </div>
+             </div>
+          </div>
+        </div>
+      );
     }
 
     // ==========================================
